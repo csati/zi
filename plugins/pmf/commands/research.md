@@ -1,6 +1,6 @@
 ---
 description: Explore the problem space and codebase to produce a synthesized research brief for planning agents.
-argument-hint: [prompt file name/path/reference, or the problem statement text itself]
+argument-hint: [prompt file path/task-directory reference, or the problem statement text itself]
 allowed-tools: Bash(date:*), Read, Grep, Glob, AskUserQuestion, Write, Task, WebFetch, WebSearch
 ---
 
@@ -14,7 +14,7 @@ Explore the problem space and codebase to produce a synthesized research brief t
 
 The argument may be **either** of the following — resolve it before doing anything else:
 
-- **A prompt file** — a file name, path, or reference (e.g. `docs/prompts/foo.md`, `@some/spec.md`, or a bare filename). If the argument resolves to a file that exists, read it and treat its contents as the prompt.
+- **A prompt file or task directory** — a file path, a path to a `.pmf/{slug}/` task directory, or a bare `{slug}` naming one (e.g. `.pmf/20260605-143000-csv-export/prompt.md`, `.pmf/20260605-143000-csv-export`, or `20260605-143000-csv-export`). If it resolves to a prompt file, read it and treat its contents as the prompt.
 - **The problem statement text itself** — inline prose describing what to research.
 
 Raw argument:
@@ -23,9 +23,10 @@ $ARGUMENTS
 
 Resolution rules:
 
-1. If the argument looks like a file name/path/reference and that file exists, read it and use its contents as the prompt.
-2. Otherwise, treat the argument text verbatim as the prompt.
-3. If the argument is empty, ask the user what they want researched before continuing.
+1. If the argument is a path to an existing file, read it and use its contents as the prompt.
+2. If the argument points to a task directory — `.pmf/{slug}/`, or a bare `{slug}` that exists as `.pmf/{slug}/` — read `prompt.md` inside it and use its contents as the prompt.
+3. Otherwise, treat the argument text verbatim as the prompt.
+4. If the argument is empty, ask the user what they want researched before continuing.
 
 ## Process
 
@@ -71,9 +72,9 @@ Then write the brief as described in **Output** below.
 
 ## Output
 
-Write the brief to the **current working directory** (not a subfolder).
+The brief is written as `brief.md` inside the task directory.
 
-1. **Determine the timestamp and description.** If the prompt came from a file whose name already embeds them — i.e. it matches `{prefix}-{YYYYMMDD-HHmmss}-{description}.md` (for example a `prompt-20260605-143000-csv-export.md` produced by `/pmf:prompt`) — **reuse that file's `{YYYYMMDD-HHmmss}` timestamp and `{description}` slug verbatim** so the brief stays paired with its source. Otherwise (an inline problem statement, or a file name that does not match the pattern), generate them fresh as below:
+1. **Determine the task directory.** If the prompt came from a file inside an existing `.pmf/{slug}/` task directory (the normal case — `prompt.md` produced by `/pmf:prompt`), **write the brief as a sibling in that same directory** so it stays paired with its source. Otherwise (an inline problem statement, or a file outside `.pmf/`), create a fresh task directory:
 
    - **Timestamp** — use the current system time:
 
@@ -83,10 +84,12 @@ Write the brief to the **current working directory** (not a subfolder).
 
    - **Description** — derive a **1–4 word** kebab-case slug that identifies the problem (e.g. `auth-token-refresh`, `csv-export`).
 
+   - Create `.pmf/{YYYYMMDD-HHmmss}-{description}/` (and `.pmf/` itself) if it does not yet exist.
+
 2. Write the file named exactly:
 
    ```
-   brief-{YYYYMMDD-HHmmss}-{description}.md
+   .pmf/{slug}/brief.md
    ```
 
 Use this structure:
@@ -117,4 +120,4 @@ Use this structure:
 
 - Never write the brief early or "just in case." Premature output defeats the purpose of the interrogation.
 - Resolve decisions with the user — do not silently pick an interpretation and bake it into the brief.
-- After writing, tell the user the exact filename you created.
+- After writing, tell the user the exact path you created (including the `.pmf/{slug}/` prefix).

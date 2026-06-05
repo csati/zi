@@ -1,6 +1,6 @@
 ---
 description: Verify a /pmf:research brief, a /pmf:prd PRD, or a /pmf:decompose plan set for correctness and completeness against the source it is based on. Interrogate each flaw one at a time with a recommended fix and a keep-as-is option, then edit the file(s) with the chosen resolutions and inline notes. Use when the user wants to double-check, validate, or sanity-check a brief, PRD, or decomposition before acting on it.
-argument-hint: [path to the brief-*.md, prd-*.md, or a plan-*-stage-*.md to verify]
+argument-hint: [path to the brief.md, prd.md, a plan-stage-*.md, or the task directory to verify]
 allowed-tools: Bash(date:*), Read, Grep, Glob, AskUserQuestion, Edit
 ---
 
@@ -8,41 +8,42 @@ allowed-tools: Bash(date:*), Read, Grep, Glob, AskUserQuestion, Edit
 
 ## Objective
 
-Verify a research brief (the output of `/pmf:research`), a PRD (the output of `/pmf:prd`), or a decomposition (the set of `plan-*-stage-*.md` files from `/pmf:decompose`) for **correctness** and **completeness** against the source it is based on, and against the actual codebase. Surface every flaw to the user **one at a time, interrogation style — never as an upfront list** — each with a recommended fix and an explicit option to confirm leaving it as-is. Apply the chosen resolution to the reviewed file in place, annotating each decision with an inline note. (A decomposition is reviewed as one unit: all stage files sharing a `{ts}-{desc}` slug.)
+Verify a research brief (the output of `/pmf:research`), a PRD (the output of `/pmf:prd`), or a decomposition (the set of `plan-stage-*.md` files from `/pmf:decompose`) for **correctness** and **completeness** against the source it is based on, and against the actual codebase. Surface every flaw to the user **one at a time, interrogation style — never as an upfront list** — each with a recommended fix and an explicit option to confirm leaving it as-is. Apply the chosen resolution to the reviewed file in place, annotating each decision with an inline note. (A decomposition is reviewed as one unit: all `plan-stage-*.md` files in a task directory.)
 
 ## Input
 
-The argument is what to verify — resolve it to a **review unit** before doing anything else. A review unit is one of: a single `brief-*.md`, a single `prd-*.md`, or a **decomposition** — the complete set of `plan-{ts}-{desc}-stage-*.md` files that share one `{ts}-{desc}` slug, reviewed together as one unit.
+The argument is what to verify — resolve it to a **review unit** before doing anything else. A review unit is one of: a single `brief.md`, a single `prd.md`, or a **decomposition** — the complete set of `plan-stage-*.md` files in one `.pmf/{slug}/` task directory, reviewed together as one unit.
 
 $ARGUMENTS
 
 Resolution rules:
 
-1. If the argument is a non-empty file name/path/reference and that file exists:
-   - A `brief-*.md` or `prd-*.md` is itself the review unit.
-   - A `plan-*-stage-*.md` resolves to the **whole sibling set**: glob `plan-{ts}-{desc}-stage-*.md` for that file's `{ts}-{desc}` slug and review all of them together.
-2. If the argument is empty, enumerate the candidate review units in the current working directory: each `prd-*.md`, each `brief-*.md`, and each decomposition (group `plan-*-stage-*.md` files by their shared `{ts}-{desc}` slug — one unit per slug). Then:
-   - **Zero units** — nothing to verify. Tell the user no `brief-*.md`, `prd-*.md`, or `plan-*-stage-*.md` was found and **terminate**.
+1. If the argument is a non-empty file name/path/reference, resolve it to an existing file — use the path as given if it exists. Once resolved:
+   - A `brief.md` or `prd.md` is itself the review unit.
+   - A `plan-stage-*.md` resolves to the **whole sibling set**: glob `.pmf/{slug}/plan-stage-*.md` for that file's task directory and review all of them together.
+2. If the argument points to a task directory (`.pmf/{slug}/`, or a bare `{slug}`), enumerate the review units inside it: its `brief.md`, its `prd.md`, and its decomposition (the `plan-stage-*.md` set). If exactly one exists, use it; if several exist, ask which to verify.
+3. If the argument is empty, enumerate the candidate review units across all task directories: each `.pmf/*/prd.md`, each `.pmf/*/brief.md`, and each decomposition (one unit per task directory that holds `plan-stage-*.md` files). Then:
+   - **Zero units** — nothing to verify. Tell the user no `brief.md`, `prd.md`, or `plan-stage-*.md` was found under any `.pmf/` task directory and **terminate**.
    - **Exactly one unit** — use it (state what you picked so the user can confirm).
-   - **More than one unit** — list the candidates (briefs, PRDs, and decompositions) and ask which to verify; wait for their choice.
-3. If a path is given but the file does not exist, say so and stop.
+   - **More than one unit** — list the candidates (briefs, PRDs, and decompositions, with their task directories) and ask which to verify; wait for their choice.
+4. If a path is given but the file does not exist, say so and stop.
 
 Confirm the resolved review unit back to the user before proceeding.
 
 ## Identify the document and its source
 
-1. **Classify the review unit** by filename prefix and structure:
-   - `brief-{ts}-{desc}.md` / research-brief structure → a **research brief**; the spec it must be faithful to is the **prompt** it was based on.
-   - `prd-{ts}-{desc}.md` / PRD structure → a **PRD**; the spec it must be faithful to is the **brief** it was based on.
-   - A set of `plan-{ts}-{desc}-stage-*.md` files → a **decomposition**; the spec it must be faithful to is the **PRD** it was based on.
+1. **Classify the review unit** by filename and structure:
+   - `brief.md` / research-brief structure → a **research brief**; the spec it must be faithful to is the **prompt** it was based on.
+   - `prd.md` / PRD structure → a **PRD**; the spec it must be faithful to is the **brief** it was based on.
+   - A set of `plan-stage-*.md` files → a **decomposition**; the spec it must be faithful to is the **PRD** it was based on.
    - None of these — tell the user you expected a `/pmf:research` brief, a `/pmf:prd` PRD, or a `/pmf:decompose` plan set; ask whether to proceed anyway, and against which source.
 
-2. **Locate the source artifact** by exploiting the shared naming convention — sibling artifacts pair on the same `{ts}-{desc}` slug:
-   - A `brief-{ts}-{desc}.md` pairs with `prompt-{ts}-{desc}.md`.
-   - A `prd-{ts}-{desc}.md` pairs with `brief-{ts}-{desc}.md`.
-   - A `plan-{ts}-{desc}-stage-*.md` set pairs with `prd-{ts}-{desc}.md`.
-   - Glob for the matching `{ts}-{desc}`. If found, read it — this is what the unit must satisfy.
-   - If not found (an inline source, or the source was deleted/renamed), ask the user to point you at the source or to state the original intent. If it is genuinely unavailable, tell the user that source-fidelity checks will be limited and proceed with the remaining checks.
+2. **Locate the source artifact** — sibling artifacts live in the same `.pmf/{slug}/` task directory, so the source is a sibling file:
+   - A `brief.md` pairs with `prompt.md` in the same directory.
+   - A `prd.md` pairs with `brief.md` in the same directory.
+   - A `plan-stage-*.md` set pairs with `prd.md` in the same directory.
+   - Read the sibling source file — this is what the unit must satisfy.
+   - If the sibling is not found (an inline source, or the source was deleted/renamed), ask the user to point you at the source or to state the original intent. If it is genuinely unavailable, tell the user that source-fidelity checks will be limited and proceed with the remaining checks.
 
 ## Process
 

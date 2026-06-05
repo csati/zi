@@ -1,6 +1,6 @@
 ---
-description: Conductor for the prompt→research→prd→decompose→implement→finalize pipeline. Inspects the artifacts in the working directory, reports where you are, and tells you the exact next command and when to clear context. Guides only — it does not run the phases.
-argument-hint: [optional {desc} slug, or part of it, to pick which feature's pipeline to track; defaults to the only/most-recent slug in the working directory]
+description: Conductor for the prompt→research→prd→decompose→implement→finalize pipeline. Inspects the artifacts in .pmf/, reports where you are, and tells you the exact next command and when to clear context. Guides only — it does not run the phases.
+argument-hint: [optional {desc} slug, or part of it, to pick which feature's pipeline to track; defaults to the only/most-recent task directory in .pmf/]
 allowed-tools: Bash(date:*), Bash(git:*), Bash(ls:*), Read, Grep, Glob, AskUserQuestion
 ---
 
@@ -12,18 +12,18 @@ Tell the user **where they are** in the spec-driven pipeline and **what to run n
 
 ## The pipeline
 
-Every artifact for one feature shares a `{ts}-{desc}` slug. The ordered phases are:
+Every artifact for one feature lives together in a **per-task directory** `.pmf/{ts}-{desc}/` in the working directory — the directory name is the feature's slug. The ordered phases are:
 
 | # | Phase | Run | Produces |
 |---|-------|-----|----------|
-| 1 | Prompt | `/pmf:prompt <desc>` | `prompt-{slug}.md` |
-| 2 | Research | `/pmf:research prompt-{slug}.md` | `brief-{slug}.md` |
-| 3 | Review brief | `/pmf:doublecheck brief-{slug}.md` | *(edits brief in place)* |
-| 4 | PRD | `/pmf:prd brief-{slug}.md` | `prd-{slug}.md` |
-| 5 | Review PRD | `/pmf:doublecheck prd-{slug}.md` | *(edits PRD in place)* |
-| 6 | Decompose | `/pmf:decompose prd-{slug}.md` | `plan-{slug}-stage-NN.md` |
-| 7 | Review decomposition | `/pmf:doublecheck plan-{slug}-stage-01.md` | *(edits stage files in place)* |
-| 8 | Implement + finalize | `/pmf:implement-all prd-{slug}.md` | committed code + gap report |
+| 1 | Prompt | `/pmf:prompt <desc>` | `.pmf/{slug}/prompt.md` |
+| 2 | Research | `/pmf:research .pmf/{slug}/prompt.md` | `.pmf/{slug}/brief.md` |
+| 3 | Review brief | `/pmf:doublecheck .pmf/{slug}/brief.md` | *(edits brief in place)* |
+| 4 | PRD | `/pmf:prd .pmf/{slug}/brief.md` | `.pmf/{slug}/prd.md` |
+| 5 | Review PRD | `/pmf:doublecheck .pmf/{slug}/prd.md` | *(edits PRD in place)* |
+| 6 | Decompose | `/pmf:decompose .pmf/{slug}/prd.md` | `.pmf/{slug}/plan-stage-NN.md` |
+| 7 | Review decomposition | `/pmf:doublecheck .pmf/{slug}/plan-stage-01.md` | *(edits stage files in place)* |
+| 8 | Implement + finalize | `/pmf:implement-all .pmf/{slug}/prd.md` | committed code + gap report |
 
 **Clear context before every phase.** Each phase's power comes from a clean context that sees only the prior artifact. Phases 1–7 are interactive (run by the user). Phase 8 is the automated back half.
 
@@ -31,21 +31,21 @@ Every artifact for one feature shares a `{ts}-{desc}` slug. The ordered phases a
 
 ### 1 — Resolve the slug
 
-- If the argument names or partially matches a `{ts}-{desc}` present in the working directory, use it.
-- Otherwise glob `prompt-*.md`, `brief-*.md`, `prd-*.md`, `plan-*-stage-*.md`, `finalize-*.md` and group by `{ts}-{desc}`:
-  - **No slugs** — the pipeline hasn't started. Tell the user to begin with `/pmf:prompt <description>` and stop.
-  - **One slug** — use it.
+- If the argument names or partially matches a `.pmf/{ts}-{desc}/` task directory, use it.
+- Otherwise glob the task directories `.pmf/*/`:
+  - **No task directories** — the pipeline hasn't started. Tell the user to begin with `/pmf:prompt <description>` and stop.
+  - **One** — use it.
   - **Several** — list them (with their furthest-reached phase) and ask which to track.
 
 ### 2 — Determine state
 
-For the chosen slug, glob which artifacts exist:
+For the chosen task directory, glob which artifacts exist inside it:
 
-- `prompt-{slug}.md` → phase 1 done
-- `brief-{slug}.md` → phase 2 done
-- `prd-{slug}.md` → phase 4 done
-- `plan-{slug}-stage-*.md` → phase 6 done (note how many stages)
-- `finalize-{slug}.md` → phase 8 has been run at least once
+- `.pmf/{slug}/prompt.md` → phase 1 done
+- `.pmf/{slug}/brief.md` → phase 2 done
+- `.pmf/{slug}/prd.md` → phase 4 done
+- `.pmf/{slug}/plan-stage-*.md` → phase 6 done (note how many stages)
+- `.pmf/{slug}/finalize.md` → phase 8 has been run at least once
 
 The **review** phases (3, 5, 7) leave no reliable marker — `/pmf:doublecheck` writes inline `> **[doublecheck …]**` notes only when something changed, and nothing when the artifact was already clean. So you cannot prove a review happened from the files. Grep the relevant artifact for `[doublecheck` as a hint, and if it's ambiguous whether the user has reviewed the latest produced artifact, **ask** rather than assume.
 
@@ -59,7 +59,7 @@ Print a compact checklist of the eight phases with a status each:
 
 Then give a single **Next:** line — the earliest incomplete phase — as the exact command to run, prefixed with **“clear context, then …”**. If the next produce-phase is preceded by an un-confirmed review phase, mention the review first as recommended-but-skippable.
 
-When phases 1–7 are complete (PRD exists, decomposed, and the decomposition has been reviewed), the next step is the automated back half: tell the user to run **`/pmf:implement-all prd-{slug}.md`**, which implements every stage with a fresh agent in order and then finalizes against the PRD.
+When phases 1–7 are complete (PRD exists, decomposed, and the decomposition has been reviewed), the next step is the automated back half: tell the user to run **`/pmf:implement-all .pmf/{slug}/prd.md`**, which implements every stage with a fresh agent in order and then finalizes against the PRD.
 
 ## Guardrails
 

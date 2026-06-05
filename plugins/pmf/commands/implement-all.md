@@ -1,6 +1,6 @@
 ---
 description: Auto-run the pipeline back half — implement every /pmf:decompose stage with a fresh agent in order (halting on conflict), then finalize against the PRD. Run once phases 1–7 (prompt→…→reviewed decomposition) are done.
-argument-hint: [path to the prd-*.md whose stages to implement, defaults to the prd-*.md in the working directory]
+argument-hint: [path to the prd.md whose stages to implement, or its task directory; defaults to the lone prd.md under .pmf/]
 allowed-tools: Bash(date:*), Bash(git:*), Read, Glob, AskUserQuestion, Workflow
 ---
 
@@ -8,7 +8,7 @@ allowed-tools: Bash(date:*), Bash(git:*), Read, Glob, AskUserQuestion, Workflow
 
 ## What this does
 
-Runs the automated back half of the pipeline. For the chosen PRD it takes the ordered `plan-{slug}-stage-NN.md` files and, **one at a time in order**, spawns a *fresh agent* to implement each stage against the live repo, then runs a finalize pass against the PRD. The sequencing, the halt-on-conflict, and the fresh-context-per-stage are handled by the `pipeline-backhalf` workflow engine — this command just prepares its inputs and launches it.
+Runs the automated back half of the pipeline. For the chosen PRD it takes the ordered `.pmf/{slug}/plan-stage-{NN}.md` files and, **one at a time in order**, spawns a *fresh agent* to implement each stage against the live repo, then runs a finalize pass against the PRD. The sequencing, the halt-on-conflict, and the fresh-context-per-stage are handled by the `pipeline-backhalf` workflow engine — this command just prepares its inputs and launches it.
 
 This is the only phase that runs unattended. Phases 1–7 are interactive; do those with `/pmf:prompt`, `/pmf:research`, `/pmf:prd`, `/pmf:decompose`, and `/pmf:doublecheck` (see `/pmf:pipeline`).
 
@@ -18,20 +18,20 @@ This is the only phase that runs unattended. Phases 1–7 are interactive; do th
 
    $ARGUMENTS
 
-   - If it's a non-empty path to an existing file, use it.
-   - Otherwise glob `prd-*.md` in the working directory: zero → tell the user there's nothing to implement and stop; one → use it; many → list and ask which.
-   - Derive the `{ts}-{desc}` slug from the PRD filename.
+   - If it's a non-empty path to an existing file, use it. If it points to a task directory (`.pmf/{slug}/`, or a bare `{slug}`), use the `prd.md` inside it.
+   - Otherwise glob `.pmf/*/prd.md`: zero → tell the user there's nothing to implement and stop; one → use it; many → list the candidate task directories and ask which.
+   - The task directory `.pmf/{slug}/` containing the PRD is the slug for everything below.
 
-2. **Gather the stages.** Glob `plan-{slug}-stage-*.md` and sort ascending by the zero-padded `NN`. If there are none, tell the user to run `/pmf:decompose prd-{slug}.md` first and stop.
+2. **Gather the stages.** Glob `.pmf/{slug}/plan-stage-*.md` and sort ascending by the zero-padded `NN`. If there are none, tell the user to run `/pmf:decompose .pmf/{slug}/prd.md` first and stop.
 
-3. **Confirm before launching.** Show the user the ordered list of stage files that will be implemented and that a finalize pass against `prd-{slug}.md` follows. Ask for an explicit go-ahead with `AskUserQuestion` — launching spawns agents that **edit and commit code**. Do not proceed without confirmation.
+3. **Confirm before launching.** Show the user the ordered list of stage files that will be implemented and that a finalize pass against `.pmf/{slug}/prd.md` follows. Ask for an explicit go-ahead with `AskUserQuestion` — launching spawns agents that **edit and commit code**. Do not proceed without confirmation.
 
 4. **Launch the engine.** Call the `Workflow` tool with the script at `${CLAUDE_PLUGIN_ROOT}/workflows/backhalf.js` and pass the inputs as `args`:
 
    ```
    Workflow({
      scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/backhalf.js",
-     args: { prd: "prd-{slug}.md", stages: ["plan-{slug}-stage-01.md", "plan-{slug}-stage-02.md", ...] }
+     args: { prd: ".pmf/{slug}/prd.md", stages: [".pmf/{slug}/plan-stage-01.md", ".pmf/{slug}/plan-stage-02.md", ...] }
    })
    ```
 

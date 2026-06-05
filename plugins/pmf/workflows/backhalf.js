@@ -8,12 +8,14 @@ export const meta = {
 }
 
 // Args (passed by the /implement-all command):
-//   args.prd    — the prd-{slug}.md to finalize against
-//   args.stages — ORDERED list of plan-{slug}-stage-NN.md filenames
+//   args.prd    — the .pmf/{slug}/prd.md to finalize against
+//   args.stages — ORDERED list of .pmf/{slug}/plan-stage-NN.md paths
 //
-// The script has no filesystem access, so the caller must pass the stage list;
-// it cannot glob for it. Stages run strictly sequentially because each one
-// assumes the committed repo state the previous one left behind.
+// Paths are relative to the repo working directory (the pipeline keeps each
+// feature's artifacts together in a .pmf/{slug}/ task directory). The script has
+// no filesystem access, so the caller must pass the stage list; it cannot glob
+// for it. Stages run strictly sequentially because each one assumes the
+// committed repo state the previous one left behind.
 
 const STAGE_RESULT = {
   type: 'object',
@@ -92,7 +94,7 @@ for (let i = 0; i < stages.length; i++) {
 
   const res = await agent(
     `You are implementing ONE stage of a decomposed feature, with a fresh context. ` +
-      `Read the plan file \`${file}\` in the working directory and follow it exactly.\n\n` +
+      `Read the plan file at \`${file}\` (a path relative to the repo working directory) and follow it exactly.\n\n` +
       `STEP 1 — verify reality. Read the files the plan lists under "Context to load" and confirm EVERY precondition in the plan actually holds in the current repo. ` +
       `If any precondition is false, or the plan contradicts what the code now shows, DO NOT work around it: return status "conflict" with a precise explanation of the mismatch, and STOP without editing anything.\n\n` +
       `STEP 2 — implement. Otherwise carry out the plan's Tasks. Describe-to-code yourself against the real repo; the plan states intent, not literal source.\n\n` +

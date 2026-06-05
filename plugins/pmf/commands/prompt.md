@@ -8,7 +8,7 @@ allowed-tools: Bash(date:*), Read, Grep, Glob, AskUserQuestion, Write
 
 ## Objective
 
-Take the user's rough idea and refine it through dialogue until you understand **exactly** what they intend. Then persist a concise, refined prompt specification to a file in the working directory so it can be fed to a future agent or session.
+Take the user's rough idea and refine it through dialogue until you understand **exactly** what they intend. Then persist a concise, refined prompt specification into a per-task directory under `.pmf/` in the current working directory so it can be fed to a future agent or session.
 
 ## Raw idea
 
@@ -47,7 +47,7 @@ Only once **both** are true:
 
 Then:
 
-1. Get the current system time for the filename:
+1. Get the current system time for the task-directory name:
 
    !`date +%Y%m%d-%H%M%S`
 
@@ -55,10 +55,10 @@ Then:
 
 2. Derive a **1–4 word** kebab-case `description` slug that identifies the problem (e.g. `auth-token-refresh`, `csv-export`).
 
-3. Write the file to the **current working directory** named exactly:
+3. This command starts the task, so it **creates the task directory**: `.pmf/{YYYYMMDD-HHmmss}-{description}/` in the current working directory (create `.pmf/` and the task directory if they do not yet exist). Every later phase writes its artifact as a sibling inside this same directory. Write the prompt file named exactly:
 
    ```
-   prompt-{YYYYMMDD-HHmmss}-{description}.md
+   .pmf/{YYYYMMDD-HHmmss}-{description}/prompt.md
    ```
 
 ## Output file contents
@@ -76,4 +76,4 @@ A short top heading naming the problem is fine; it does not count toward the sen
 
 - This command **clarifies and specifies** — it does not implement, edit code, or run anything beyond read-only exploration and writing the single output file.
 - Never write the file early or "just in case." Premature output defeats the purpose.
-- After writing, tell the user the exact filename you created.
+- After writing, tell the user the exact path you created (including the `.pmf/{slug}/` prefix).

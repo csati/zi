@@ -1,6 +1,6 @@
 ---
 description: Verify a fully-implemented feature against its PRD end to end — every FR's acceptance criteria met, full build/test/lint green — and report the gaps. Run after the last /pmf:decompose stage is implemented.
-argument-hint: [path to the prd-*.md to verify against, defaults to the prd-*.md in the working directory]
+argument-hint: [path to the prd.md to verify against, or its task directory; defaults to the lone prd.md under .pmf/]
 allowed-tools: Bash(date:*), Bash(git:*), Read, Grep, Glob, AskUserQuestion, Write
 ---
 
@@ -18,11 +18,11 @@ $ARGUMENTS
 
 Resolve the PRD before doing anything else:
 
-1. If the argument is a non-empty path to an existing file, use it.
-2. Otherwise glob `prd-*.md` in the current working directory:
-   - **Zero matches** — nothing to verify against. Tell the user no `prd-*.md` was found and **terminate**.
+1. If the argument is a non-empty path to an existing file, use it. If it points to a task directory (`.pmf/{slug}/`, or a bare `{slug}`), use the `prd.md` inside it.
+2. Otherwise glob `.pmf/*/prd.md`:
+   - **Zero matches** — nothing to verify against. Tell the user no `prd.md` was found under any `.pmf/` task directory and **terminate**.
    - **Exactly one match** — use it (state which file you picked).
-   - **More than one match** — list them and ask which feature to finalize; wait for the choice.
+   - **More than one match** — list the candidate task directories and ask which feature to finalize; wait for the choice.
 3. If a path is given but the file does not exist, say so and stop.
 
 Confirm the resolved PRD path back to the user before proceeding.
@@ -32,7 +32,7 @@ Confirm the resolved PRD path back to the user before proceeding.
 ### Phase 1 — Build the acceptance checklist
 
 1. Read the PRD in full. Extract every `FR-*` with its acceptance criteria, every success metric, every technical constraint, and every non-goal.
-2. If the paired `plan-{ts}-{desc}-stage-*.md` files exist (same slug), read them to see what each stage claimed to deliver — but treat that as a claim to verify, not as truth.
+2. If the paired `.pmf/{slug}/plan-stage-*.md` files exist (same task directory), read them to see what each stage claimed to deliver — but treat that as a claim to verify, not as truth.
 3. Discover the project's real **build / test / lint** commands from its `AGENTS.md` / `CLAUDE.md`.
 
 ### Phase 2 — Verify each requirement against the code
@@ -60,7 +60,7 @@ For each gap, recommend the route and **confirm with the user before any code ch
 - a new stage appended to the decomposition, or
 - a revision back up the pipeline (`/pmf:prd` → `/pmf:doublecheck` → `/pmf:decompose`) when the gap is a spec problem, not a coding one.
 
-Optionally, if the user wants a durable record, write the report to `finalize-{ts}-{desc}.md` (reuse the PRD's `{ts}-{desc}` slug). Get the timestamp with:
+Optionally, if the user wants a durable record, write the report to `.pmf/{slug}/finalize.md` (the PRD's task directory). Get the timestamp with:
 
 !`date +%Y-%m-%d`
 

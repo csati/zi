@@ -37,38 +37,42 @@ After install, commands are namespaced **`/pmf:<command>`** (e.g. `/pmf:prompt`)
 `.md` edits apply live; if you change `marketplace.json` or `plugin.json`, run
 `/plugin marketplace update`.
 
-## The core architecture: a slug-linked, context-cleared pipeline
+## The core architecture: a directory-per-task, context-cleared pipeline
 
 The plugin turns a rough idea into shipped code through a chain of phases, each run with a
 **fresh/cleared context** so it sees only the prior artifact, not the whole history. The phases
-find each other through one convention — **every artifact for one feature shares a
-`{ts}-{desc}` slug** (`ts` = `YYYYMMDD-HHmmss`, `desc` = 1–4 word kebab slug):
+find each other through one convention — **every artifact for one feature lives together in a
+per-task directory** `.pmf/{ts}-{desc}/` in the current working directory (`ts` =
+`YYYYMMDD-HHmmss`, `desc` = 1–4 word kebab slug; the directory name is the feature's slug,
+created on first write). Within it the artifacts are named by phase (paths below omit the
+`.pmf/{slug}/` prefix for brevity):
 
 ```
-prompt-{slug}.md → brief-{slug}.md → prd-{slug}.md → plan-{slug}-stage-{NN}.md → finalize-{slug}.md
-   /pmf:prompt       /pmf:research      /pmf:prd          /pmf:decompose            /pmf:finalize
+prompt.md → brief.md → prd.md → plan-stage-{NN}.md → finalize.md
+/pmf:prompt  /pmf:research  /pmf:prd   /pmf:decompose      /pmf:finalize
 ```
 
 Review gates (`/pmf:doublecheck`) sit between produce-phases and edit the prior artifact
-**in place**. `/pmf:pipeline` is a read-only conductor that inspects which artifacts exist for a
-slug and reports the next command; `/pmf:implement-all` runs the automated back half.
+**in place**. `/pmf:pipeline` is a read-only conductor that inspects which artifacts exist in a
+task directory and reports the next command; `/pmf:implement-all` runs the automated back half.
 
-The slug is load-bearing. When a command produces the next artifact, it **reuses the source
-file's `{ts}-{desc}` verbatim** (only generating a fresh timestamp when the source name doesn't
-match the pattern). Preserve this when editing any produce-phase command — breaking the slug
-breaks how every downstream phase locates its inputs.
+The task directory is load-bearing. When a command produces the next artifact, it **writes it
+as a sibling in the source file's `.pmf/{slug}/` directory** (only creating a fresh task
+directory when the source was passed by a path outside `.pmf/`). Preserve this when editing any
+produce-phase command — moving an artifact out of its task directory breaks how every
+downstream phase locates its inputs.
 
 ### Phase responsibilities
 
 | Command | Reads | Writes | Role |
 |---|---|---|---|
-| `/pmf:prompt` | rough idea | `prompt-{slug}.md` | interrogate intent, surface flaws, save refined prompt |
-| `/pmf:research` | `prompt-*` or inline | `brief-{slug}.md` | ground in codebase, produce research brief |
-| `/pmf:prd` | `brief-*` | `prd-{slug}.md` | testable FRs, non-goals, constraints |
-| `/pmf:decompose` | `prd-*` | `plan-{slug}-stage-{NN}.md` | split into ordered, self-contained, ~50K-token stages |
+| `/pmf:prompt` | rough idea | `{slug}/prompt.md` | interrogate intent, surface flaws, save refined prompt |
+| `/pmf:research` | `{slug}/prompt.md` or inline | `{slug}/brief.md` | ground in codebase, produce research brief |
+| `/pmf:prd` | `{slug}/brief.md` | `{slug}/prd.md` | testable FRs, non-goals, constraints |
+| `/pmf:decompose` | `{slug}/prd.md` | `{slug}/plan-stage-{NN}.md` | split into ordered, self-contained, ~50K-token stages |
 | `/pmf:doublecheck` | brief / PRD / plan set | edits in place | verify against source + codebase, one flaw at a time |
-| `/pmf:implement-all` | `prd-*` + stages | code + commits | launch `backhalf.js` |
-| `/pmf:finalize` | `prd-*` | optional `finalize-*` | verify whole feature against PRD, report gaps |
+| `/pmf:implement-all` | `{slug}/prd.md` + stages | code + commits | launch `backhalf.js` |
+| `/pmf:finalize` | `{slug}/prd.md` | optional `{slug}/finalize.md` | verify whole feature against PRD, report gaps |
 | `/pmf:pipeline` | all artifacts | nothing | read-only conductor; reports next step |
 
 `commit` and `stage` are general-purpose git helpers bundled with the plugin — handy, but not
@@ -82,10 +86,11 @@ Each `plugins/pmf/commands/*.md` is frontmatter + a prompt body. Match the exist
   `allowed-tools` is a real permission boundary: list only what the command needs, scoped
   (e.g. `Bash(date:*)`, `Bash(git:*)`). A command can't use a tool it doesn't declare.
 - **`$ARGUMENTS`** — placeholder the body uses to receive the invocation argument. Most
-  produce-commands resolve it: if it's a path use it, else glob for the expected prefix
-  (`prd-*.md` etc.) and act on zero/one/many.
-- **Inline bash** — `` !`date +%Y%m%d-%H%M%S` `` executes at command-run time to stamp filenames;
-  this is why `Bash(date:*)` appears in `allowed-tools`.
+  produce-commands resolve it: if it's a path use it (a path or bare slug naming a `.pmf/{slug}/`
+  task directory resolves to the expected file inside it), else glob for the expected file across
+  task directories (`.pmf/*/prd.md` etc.) and act on zero/one/many.
+- **Inline bash** — `` !`date +%Y%m%d-%H%M%S` `` executes at command-run time to stamp the task
+  directory name; this is why `Bash(date:*)` appears in `allowed-tools`.
 - **Produce-phase shape** — these commands follow a strict interrogation discipline:
   interrogate → surface flaws and resolve each WITH the user → only then write the output file.
   "Never write the output early / just in case" is a recurring guardrail; preserve it.

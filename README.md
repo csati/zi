@@ -7,21 +7,22 @@ context-cleared phases, each producing a reviewable artifact that feeds the next
 prompt → research → (review) → prd → (review) → decompose → (review) → implement → finalize
 ```
 
-Every artifact for one feature shares a `{ts}-{desc}` slug, so the phases find each
-other automatically (`prompt-…` → `brief-…` → `prd-…` → `plan-…-stage-NN`).
+Every artifact for one feature lives together in a per-task directory `.pmf/{ts}-{desc}/`
+in your working directory — the directory name is the feature's slug — so the phases find
+each other automatically (`prompt.md` → `brief.md` → `prd.md` → `plan-stage-NN.md`).
 
 ## The phases
 
 | # | Phase | Command | Produces |
 |---|-------|---------|----------|
-| 1 | Prompt | `/pmf:prompt <desc>` | `prompt-{slug}.md` |
-| 2 | Research | `/pmf:research prompt-{slug}.md` | `brief-{slug}.md` |
-| 3 | Review brief | `/pmf:doublecheck brief-{slug}.md` | edits brief in place |
-| 4 | PRD | `/pmf:prd brief-{slug}.md` | `prd-{slug}.md` |
-| 5 | Review PRD | `/pmf:doublecheck prd-{slug}.md` | edits PRD in place |
-| 6 | Decompose | `/pmf:decompose prd-{slug}.md` | `plan-{slug}-stage-NN.md` |
-| 7 | Review decomposition | `/pmf:doublecheck plan-{slug}-stage-01.md` | edits stage files in place |
-| 8 | Implement + finalize | `/pmf:implement-all prd-{slug}.md` | committed code + gap report |
+| 1 | Prompt | `/pmf:prompt <desc>` | `.pmf/{slug}/prompt.md` |
+| 2 | Research | `/pmf:research .pmf/{slug}/prompt.md` | `.pmf/{slug}/brief.md` |
+| 3 | Review brief | `/pmf:doublecheck .pmf/{slug}/brief.md` | edits brief in place |
+| 4 | PRD | `/pmf:prd .pmf/{slug}/brief.md` | `.pmf/{slug}/prd.md` |
+| 5 | Review PRD | `/pmf:doublecheck .pmf/{slug}/prd.md` | edits PRD in place |
+| 6 | Decompose | `/pmf:decompose .pmf/{slug}/prd.md` | `.pmf/{slug}/plan-stage-NN.md` |
+| 7 | Review decomposition | `/pmf:doublecheck .pmf/{slug}/plan-stage-01.md` | edits stage files in place |
+| 8 | Implement + finalize | `/pmf:implement-all .pmf/{slug}/prd.md` | committed code + gap report |
 
 **Clear context between phases.** Each phase's quality comes from a clean context that
 sees only the prior artifact. Phases 1–7 are interactive — you run them. Phase 8 is the
@@ -35,8 +36,8 @@ when to clear context. It only guides — it never runs a phase or edits anythin
 
 ### `/pmf:implement-all` — the automated back half
 
-Once phases 1–7 are done, `/pmf:implement-all prd-{slug}.md` launches the `backhalf.js`
-workflow: it implements each `plan-{slug}-stage-NN.md` with a **fresh agent, one at a
+Once phases 1–7 are done, `/pmf:implement-all .pmf/{slug}/prd.md` launches the `backhalf.js`
+workflow: it implements each `.pmf/{slug}/plan-stage-NN.md` with a **fresh agent, one at a
 time, in order**, halts the moment a stage reports a precondition conflict, then runs a
 finalize pass that verifies the whole feature against the PRD and reports gaps.
 

@@ -1,6 +1,6 @@
 ---
 description: Generate a Product Requirements Document (PRD) from a research brief. Use when the user wants to create a PRD, write requirements, or plan a feature from a brief.
-argument-hint: [path to research brief, defaults to the brief-*.md in the working directory]
+argument-hint: [path to research brief or its task directory, defaults to the lone brief.md under .pmf/]
 allowed-tools: Bash(date:*), Bash(git:*), Read, Grep, Glob, AskUserQuestion, Write
 ---
 
@@ -18,11 +18,11 @@ $ARGUMENTS
 
 Resolve the brief before doing anything else:
 
-1. If the argument above is a non-empty path, use that file as the brief.
-2. Otherwise, glob `brief-*.md` in the current working directory (the output of the explore phase) and act on the count of matches:
-   - **Zero matches** — there is nothing to work from. Tell the user no `brief-*.md` file was found in the working directory and **terminate** without producing a PRD.
+1. If the argument is a non-empty path to an existing file, use that file as the brief. If it points to a task directory (`.pmf/{slug}/`, or a bare `{slug}`), use the `brief.md` inside it.
+2. Otherwise, glob `.pmf/*/brief.md` (the output of the explore phase) and act on the count of matches:
+   - **Zero matches** — there is nothing to work from. Tell the user no `brief.md` was found under any `.pmf/` task directory and **terminate** without producing a PRD.
    - **Exactly one match** — use it as the brief.
-   - **More than one match** — ask the user which brief to use (list the candidates) and wait for their choice before continuing.
+   - **More than one match** — ask the user which brief to use (list the candidate task directories) and wait for their choice before continuing.
 
 ## Process
 
@@ -66,9 +66,9 @@ Fold the resolutions from Phase 2 into the relevant sections, then write the fil
 
 ## Output
 
-Write the PRD to the **current working directory** (not a subfolder).
+The PRD is written as `prd.md` inside the brief's task directory.
 
-1. **Determine the timestamp and description.** If the brief's file name matches `brief-{YYYYMMDD-HHmmss}-{description}.md`, **reuse its `{YYYYMMDD-HHmmss}` timestamp and `{description}` slug verbatim** so the PRD stays paired with the brief it came from (the normal case — briefs produced by `/pmf:research` always carry them). Otherwise (a brief passed by a custom path whose name does not match the pattern), generate them fresh as below:
+1. **Determine the task directory.** Write the PRD as a sibling of the brief — in the same `.pmf/{slug}/` directory the brief lives in — so it stays paired with the brief it came from (the normal case). Only if the brief was passed by a custom path outside `.pmf/` do you create a fresh task directory:
 
    - **Timestamp** — use the current system time:
 
@@ -78,10 +78,12 @@ Write the PRD to the **current working directory** (not a subfolder).
 
    - **Description** — derive a **1–4 word** kebab-case slug that identifies the feature (e.g. `auth-token-refresh`, `csv-export`).
 
+   - Create `.pmf/{YYYYMMDD-HHmmss}-{description}/` if it does not yet exist.
+
 2. Write the file named exactly:
 
    ```
-   prd-{YYYYMMDD-HHmmss}-{description}.md
+   .pmf/{slug}/prd.md
    ```
 
 Use this structure:
@@ -135,4 +137,4 @@ Use this structure:
 
 ## Commit & next step
 
-Commit the PRD file you just wrote (`prd-{YYYYMMDD-HHmmss}-{description}.md`) to git. The natural next step is `/pmf:decompose`, which splits this PRD into ordered, independently-runnable `plan-{YYYYMMDD-HHmmss}-{description}-stage-{NN}.md` files — one per implementation stage, each runnable by a fresh agent within a ~50K-token budget.
+Commit the PRD file you just wrote (`.pmf/{slug}/prd.md`) to git. The natural next step is `/pmf:decompose`, which splits this PRD into ordered, independently-runnable `.pmf/{slug}/plan-stage-{NN}.md` files — one per implementation stage, each runnable by a fresh agent within a ~50K-token budget.

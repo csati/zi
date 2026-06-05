@@ -1,6 +1,6 @@
 ---
-description: Decompose a PRD into an ordered set of self-contained plan-*-stage-{N}.md files, each runnable by a fresh agent (no shared context) within a ~50K-token budget. Use after /pmf:prd to turn a PRD into sequential implementation stages.
-argument-hint: [path to the prd-*.md to decompose, defaults to the prd-*.md in the working directory]
+description: Decompose a PRD into an ordered set of self-contained plan-stage-{NN}.md files, each runnable by a fresh agent (no shared context) within a ~50K-token budget. Use after /pmf:prd to turn a PRD into sequential implementation stages.
+argument-hint: [path to the prd.md or its task directory, defaults to the lone prd.md under .pmf/]
 allowed-tools: Bash(date:*), Bash(git:*), Read, Grep, Glob, AskUserQuestion, Write
 ---
 
@@ -8,7 +8,7 @@ allowed-tools: Bash(date:*), Bash(git:*), Read, Grep, Glob, AskUserQuestion, Wri
 
 ## Objective
 
-Split a Product Requirements Document into **N ordered plan-stage files** — `plan-{ts}-{desc}-stage-{NN}.md`. Run in sequence by fresh agents, the stages fully implement the PRD. Every stage must be:
+Split a Product Requirements Document into **N ordered plan-stage files** — `.pmf/{slug}/plan-stage-{NN}.md`. Run in sequence by fresh agents, the stages fully implement the PRD. Every stage must be:
 
 - **Self-contained** — it carries everything its agent needs; it never relies on another stage's conversation or memory.
 - **Sequentially dependent only via the repo** — the only thing a stage inherits from earlier stages is the **committed repository state** they left behind, expressed as verifiable facts.
@@ -23,11 +23,11 @@ $ARGUMENTS
 
 Resolve the PRD before doing anything else:
 
-1. If the argument above is a non-empty path, use that file as the PRD.
-2. Otherwise, glob `prd-*.md` in the current working directory and act on the count of matches:
-   - **Zero matches** — nothing to decompose. Tell the user no `prd-*.md` was found and **terminate**.
+1. If the argument is a non-empty path to an existing file, use that file as the PRD. If it points to a task directory (`.pmf/{slug}/`, or a bare `{slug}`), use the `prd.md` inside it.
+2. Otherwise, glob `.pmf/*/prd.md` and act on the count of matches:
+   - **Zero matches** — nothing to decompose. Tell the user no `prd.md` was found under any `.pmf/` task directory and **terminate**.
    - **Exactly one match** — use it (state which file you picked).
-   - **More than one match** — ask the user which PRD to use (list the candidates) and wait for their choice.
+   - **More than one match** — ask the user which PRD to use (list the candidate task directories) and wait for their choice.
 3. If a path is given but the file does not exist, say so and stop.
 
 Confirm the resolved PRD path back to the user before proceeding.
@@ -75,16 +75,16 @@ Use `AskUserQuestion` (or ask plainly) to confirm or adjust. **Do not write stag
 
 ### Phase 4 — Write the stage files
 
-**Determine the timestamp and description slug.** If the PRD's name matches `prd-{YYYYMMDD-HHmmss}-{description}.md`, **reuse its `{YYYYMMDD-HHmmss}` and `{description}` verbatim** so the plans stay paired with their PRD (the normal case). Otherwise generate a fresh timestamp:
+Write the stage files as siblings of the PRD, inside the same `.pmf/{slug}/` task directory the PRD lives in (the normal case). Only if the PRD was passed by a custom path outside `.pmf/` do you create a fresh task directory — get a timestamp with
 
 !`date +%Y%m%d-%H%M%S`
 
-and derive a 1–4 word kebab-case `{description}` from the PRD title.
+and derive a 1–4 word kebab-case `{description}` from the PRD title to form `.pmf/{YYYYMMDD-HHmmss}-{description}/`.
 
-Write one file per stage to the **current working directory**, named exactly (zero-pad `N` to two digits so the files sort in execution order):
+Write one file per stage into the task directory, named exactly (zero-pad `N` to two digits so the files sort in execution order):
 
 ```
-plan-{YYYYMMDD-HHmmss}-{description}-stage-{NN}.md
+.pmf/{slug}/plan-stage-{NN}.md
 ```
 
 Each stage file MUST follow this structure, filled with concrete, project-specific detail (real paths, real commands):
@@ -92,7 +92,7 @@ Each stage file MUST follow this structure, filled with concrete, project-specif
 ```markdown
 # Stage {N} of {M} — {stage title}
 
-> Source PRD: `prd-{ts}-{desc}.md` — read it for full background.
+> Source PRD: `.pmf/{slug}/prd.md` — read it for full background.
 > Run this stage with a **fresh agent**. It assumes ONLY the committed repository state left by stages 1–{N-1}, never any prior conversation.
 
 ## Mission
@@ -157,4 +157,4 @@ On completion: {what is now true in the repo}. Commit with `{type}: {summary}`. 
 
 ## Commit
 
-After writing the stage files, commit them (`plan-{YYYYMMDD-HHmmss}-{description}-stage-*.md`) to git so the plan is captured alongside the PRD.
+After writing the stage files, commit them (`.pmf/{slug}/plan-stage-*.md`) to git so the plan is captured alongside the PRD.
