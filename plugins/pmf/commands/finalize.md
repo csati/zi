@@ -1,7 +1,7 @@
 ---
 description: Verify a fully-implemented feature against its PRD end to end — every FR's acceptance criteria met, full build/test/lint green — and report the gaps. Run after the last /pmf:decompose stage is implemented.
 argument-hint: [path to the prd-*.md to verify against, defaults to the prd-*.md in the working directory]
-allowed-tools: Bash(date:*), Bash(git:*), Bash(./gradlew:*), Bash(bun:*), Bash(mise:*), Read, Grep, Glob, AskUserQuestion, Write
+allowed-tools: Bash(date:*), Bash(git:*), Read, Grep, Glob, AskUserQuestion, Write
 ---
 
 # Finalize — verify the feature against its PRD

@@ -40,26 +40,49 @@ workflow: it implements each `plan-{slug}-stage-NN.md` with a **fresh agent, one
 time, in order**, halts the moment a stage reports a precondition conflict, then runs a
 finalize pass that verifies the whole feature against the PRD and reports gaps.
 
-## Install (local marketplace)
+## Install
+
+This repo is **self-contained**: its root is a one-plugin marketplace named `ncs-plugins`
+(`.claude-plugin/marketplace.json`), and the plugin itself lives in `plugins/pmf/`.
+
+### Share with colleagues (git-hosted)
+
+Push this repo to a git host, then anyone adds it as a marketplace and installs the plugin:
 
 ```
-/plugin marketplace add /Users/ncs/dev/claude/plugins
-/plugin install pmf@local
+/plugin marketplace add <owner>/pmf        # GitHub owner/repo shorthand, or a full git URL
+/plugin install pmf@ncs-plugins
 ```
 
-Validate before installing if you like: `/plugin validate /Users/ncs/dev/claude/plugins`.
+`ncs-plugins` is the marketplace name; `pmf` is the plugin within it. Relative plugin sources
+only resolve when the marketplace is added **over git** (or a local path) — not via a bare URL
+to `marketplace.json`, which downloads only the catalog and none of the plugin files.
 
-Editing the command `.md` files is picked up live. If you change `marketplace.json`
-itself, run `/plugin marketplace update`.
+### Local development
+
+```
+/plugin marketplace add /Users/ncs/dev/claude/plugins/pmf   # this repo, as a local marketplace
+/plugin install pmf@ncs-plugins
+```
+
+Validate first if you like: `/plugin validate /Users/ncs/dev/claude/plugins/pmf`.
+
+Editing the command `.md` files under `plugins/pmf/commands/` is picked up live. If you change
+`marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## Contents
 
 ```
-pmf/
-├── .claude-plugin/plugin.json
-├── commands/        prompt, research, prd, decompose, doublecheck, finalize, pipeline, implement-all
-├── workflows/backhalf.js   ← the sequential implement→finalize engine
-└── README.md
+pmf/                                   ← repo root = the "ncs-plugins" marketplace
+├── .claude-plugin/marketplace.json    ← the catalog (lists the pmf plugin)
+├── plugins/pmf/                       ← the plugin itself
+│   ├── .claude-plugin/plugin.json
+│   ├── commands/   prompt, research, prd, decompose, doublecheck, finalize,
+│   │               pipeline, implement-all, stage, commit
+│   └── workflows/backhalf.js          ← the sequential implement→finalize engine
+├── README.md
+├── CLAUDE.md
+└── LICENSE
 ```
 
 `implement-all` references the engine as `${CLAUDE_PLUGIN_ROOT}/workflows/backhalf.js`, so
@@ -72,5 +95,5 @@ the plugin is path-portable — it works wherever it's installed, on any machine
   it greps for those notes as a hint and asks when unsure.
 - **`finalize` reports, it doesn't fix.** The back-half's finalize pass returns a per-FR
   met/partial/missing gap report; deciding how to close a gap stays with you.
-- **`stage` and `commit`** are general-purpose and intentionally left as your user-level
-  commands, not bundled here.
+- **`stage` and `commit`** are general-purpose git helpers bundled alongside the pipeline
+  commands — handy, but not part of the spec-driven flow itself.

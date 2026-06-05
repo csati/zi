@@ -5,12 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this repo is
 
 `pmf` is a **Claude Code plugin**, not an application. It has no build, no test runner, and
-no dependencies. It ships two kinds of artifact:
+no dependencies. The repo is **self-contained**: its root is a one-plugin marketplace
+(`.claude-plugin/marketplace.json`, name `ncs-plugins`) and the plugin lives in `plugins/pmf/`.
+The plugin ships two kinds of artifact:
 
-- **Slash commands** — `commands/*.md`, each a Markdown file with YAML frontmatter. These ARE
-  the product: the body is the prompt Claude executes when the command is invoked.
-- **One workflow script** — `workflows/backhalf.js`, JavaScript run by the `Workflow` tool
-  (not by Node), which orchestrates subagents.
+- **Slash commands** — `plugins/pmf/commands/*.md`, each a Markdown file with YAML frontmatter.
+  These ARE the product: the body is the prompt Claude executes when the command is invoked.
+- **One workflow script** — `plugins/pmf/workflows/backhalf.js`, JavaScript run by the `Workflow`
+  tool (not by Node), which orchestrates subagents.
 
 Editing any command `.md` is picked up live by an installed plugin — no rebuild. There is
 nothing to compile or lint; "testing" a change means installing the plugin and running the
@@ -18,14 +20,18 @@ command.
 
 ## Install / validate / develop
 
-This repo is one plugin inside the local marketplace at `/Users/ncs/dev/claude/plugins`
-(`.claude-plugin/marketplace.json`, marketplace name `local`).
+The repo root is the marketplace; `plugins/pmf/` is the plugin. For local development add the
+repo itself as a marketplace:
 
 ```
-/plugin marketplace add /Users/ncs/dev/claude/plugins   # register the marketplace
-/plugin install pmf@local                                # install this plugin
-/plugin validate /Users/ncs/dev/claude/plugins           # validate before installing
+/plugin marketplace add /Users/ncs/dev/claude/plugins/pmf   # register this repo as a marketplace
+/plugin install pmf@ncs-plugins                             # install the plugin
+/plugin validate /Users/ncs/dev/claude/plugins/pmf          # validate before installing
 ```
+
+To share with colleagues, push the repo to a git host; they run `/plugin marketplace add
+<owner>/pmf` then `/plugin install pmf@ncs-plugins`. Relative plugin sources resolve only when
+the marketplace is added over git or a local path — not via a bare URL to `marketplace.json`.
 
 After install, commands are namespaced **`/pmf:<command>`** (e.g. `/pmf:prompt`). Command
 `.md` edits apply live; if you change `marketplace.json` or `plugin.json`, run
@@ -65,11 +71,12 @@ breaks how every downstream phase locates its inputs.
 | `/pmf:finalize` | `prd-*` | optional `finalize-*` | verify whole feature against PRD, report gaps |
 | `/pmf:pipeline` | all artifacts | nothing | read-only conductor; reports next step |
 
-`commit` and `stage` are general-purpose helpers, intentionally not part of the pipeline.
+`commit` and `stage` are general-purpose git helpers bundled with the plugin — handy, but not
+pipeline phases.
 
 ## How commands are written (conventions to match when editing)
 
-Each `commands/*.md` is frontmatter + a prompt body. Match the existing structure:
+Each `plugins/pmf/commands/*.md` is frontmatter + a prompt body. Match the existing structure:
 
 - **Frontmatter** — `description` (shown in the picker), `argument-hint`, and `allowed-tools`.
   `allowed-tools` is a real permission boundary: list only what the command needs, scoped
@@ -83,7 +90,7 @@ Each `commands/*.md` is frontmatter + a prompt body. Match the existing structur
   interrogate → surface flaws and resolve each WITH the user → only then write the output file.
   "Never write the output early / just in case" is a recurring guardrail; preserve it.
 
-## The back-half workflow engine (`workflows/backhalf.js`)
+## The back-half workflow engine (`plugins/pmf/workflows/backhalf.js`)
 
 Launched by `/pmf:implement-all` via the `Workflow` tool, referenced as
 `${CLAUDE_PLUGIN_ROOT}/workflows/backhalf.js` so the plugin is path-portable. Key constraints

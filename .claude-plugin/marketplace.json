@@ -1,0 +1,14 @@
+{
+  "name": "ncs-plugins",
+  "owner": {
+    "name": "Norbert Csatari"
+  },
+  "description": "Personal Claude Code plugins",
+  "plugins": [
+    {
+      "name": "pmf",
+      "source": "./plugins/pmf",
+      "description": "Spec-driven development pipeline: prompt → research → prd → decompose → review → implement → finalize."
+    }
+  ]
+}

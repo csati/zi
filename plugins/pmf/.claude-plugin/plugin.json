@@ -3,6 +3,7 @@
   "displayName": "PMF Pipeline",
   "description": "Spec-driven development pipeline: prompt → research → prd → decompose → review → implement → finalize, with context-clearing gates and an automated implementation back-half.",
   "version": "1.0.0",
+  "license": "MIT",
   "author": {
     "name": "Norbert Csatari"
   },
