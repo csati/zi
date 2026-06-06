@@ -109,8 +109,17 @@ baked into its design — keep them if you modify it:
 - **Halt on conflict.** Each stage agent verifies preconditions against the real repo first; if
   a precondition is false it returns `status: "conflict"` and stops without editing. The loop
   halts immediately and reports — it never forces a stale plan onto the next stage.
-- **Structured returns.** Agents are forced to a JSON schema (`STAGE_RESULT`, `FINALIZE_REPORT`)
-  so results are validated data, not prose. The finalize agent only reports gaps; it does not fix.
+- **Independent per-stage verification.** No stage advances on the implementer's word alone.
+  After a stage reports `done`, a *separate* `verifyStage()` agent re-runs that stage's exact
+  acceptance commands (the per-FR selectors + build/test/lint the plan names) against the
+  **committed** state, asserting a clean tree and the commit present and requiring exit code 0.
+  It is a **bash proxy, not a judge** — it reports raw facts; the pass/fail decision is mechanical
+  (`verificationPassed()`), never the agent's discretion. A failed gate halts the run
+  (`reason: "verification-failed"`). It runs strictly between stages, leaves the tree as it found
+  it, and is the single reusable gate that any review-driven fix re-enters (see todo `01`).
+- **Structured returns.** Agents are forced to a JSON schema (`STAGE_RESULT`, `VERIFICATION_RESULT`,
+  `FINALIZE_REPORT`) so results are validated data, not prose. Per-stage verifier evidence attaches
+  at `results[i].verification`. The finalize agent only reports gaps; it does not fix.
 
 ## Cross-cutting principles encoded in these commands
 

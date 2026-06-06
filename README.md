@@ -38,8 +38,11 @@ when to clear context. It only guides — it never runs a phase or edits anythin
 
 Once phases 1–7 are done, `/pmf:implement-all .pmf/{slug}/prd.md` launches the `backhalf.js`
 workflow: it implements each `.pmf/{slug}/plan-stage-NN.md` with a **fresh agent, one at a
-time, in order**, halts the moment a stage reports a precondition conflict, then runs a
-finalize pass that verifies the whole feature against the PRD and reports gaps.
+time, in order**. After each stage a **separate verifier agent** independently re-runs that
+stage's acceptance commands against the committed state — so no stage advances on the
+implementer's word alone — and the run halts the moment a stage reports a precondition conflict
+or its verification fails. A final finalize pass then verifies the whole feature against the PRD
+and reports gaps.
 
 ## Install
 
@@ -80,7 +83,7 @@ pmf/                                   ← repo root = the "ncs-plugins" marketp
 │   ├── .claude-plugin/plugin.json
 │   ├── commands/   prompt, research, prd, decompose, doublecheck, finalize,
 │   │               pipeline, implement-all, stage, commit
-│   └── workflows/backhalf.js          ← the sequential implement→finalize engine
+│   └── workflows/backhalf.js          ← the sequential implement→verify→finalize engine
 ├── README.md
 ├── CLAUDE.md
 └── LICENSE

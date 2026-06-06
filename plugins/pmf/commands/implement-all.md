@@ -8,7 +8,7 @@ allowed-tools: Bash(date:*), Bash(git:*), Read, Glob, AskUserQuestion, Workflow
 
 ## What this does
 
-Runs the automated back half of the pipeline. For the chosen PRD it takes the ordered `.pmf/{slug}/plan-stage-{NN}.md` files and, **one at a time in order**, spawns a *fresh agent* to implement each stage against the live repo, then runs a finalize pass against the PRD. The sequencing, the halt-on-conflict, and the fresh-context-per-stage are handled by the `pipeline-backhalf` workflow engine — this command just prepares its inputs and launches it.
+Runs the automated back half of the pipeline. For the chosen PRD it takes the ordered `.pmf/{slug}/plan-stage-{NN}.md` files and, **one at a time in order**, spawns a *fresh agent* to implement each stage against the live repo. After each stage, a **separate verifier agent** independently re-runs that stage's exact acceptance commands against the committed state — confirming a clean tree, the commit, and exit-code-0 — before the next stage starts; no stage advances on the implementer's word alone. A finalize pass against the PRD follows. The sequencing, the per-stage verification, the halt-on-conflict, and the fresh-context-per-stage are handled by the `pipeline-backhalf` workflow engine — this command just prepares its inputs and launches it.
 
 This is the only phase that runs unattended. Phases 1–7 are interactive; do those with `/pmf:prompt`, `/pmf:research`, `/pmf:prd`, `/pmf:decompose`, and `/pmf:doublecheck` (see `/pmf:pipeline`).
 
@@ -37,12 +37,14 @@ This is the only phase that runs unattended. Phases 1–7 are interactive; do th
 
    Pass `stages` already ordered. The workflow runs in the background; you'll be notified when it finishes.
 
-5. **Report the outcome** when it returns:
-   - **Completed** — summarize which stages landed (and their commits), then present the finalize gap report: per-FR met/partial/missing **and how each was verified** (`verifiedBy` — the executed test selector vs inspection/waiver, flagging any "met" established only by inspection), build/test/lint results, and the bottom line on whether the PRD is satisfied.
-   - **Halted on conflict** — name the stage that stopped and quote its reason. Recommend the route per the stop-and-report rule: a small local fix, a revised/appended stage, or a step back up the pipeline (`/pmf:prd` → `/pmf:doublecheck` → `/pmf:decompose`) when the plan no longer matches reality. Let the user choose — don't auto-resume.
+5. **Report the outcome** when it returns. The return carries `results[]` (each `{ file, result, verification }`) and, on completion, `report`; on a halt it carries `halted: true`, `reason`, and `atStage`.
+   - **Completed** (`halted` falsy) — summarize which stages landed (and their commits), noting that **each was independently verified** — its acceptance commands re-ran exit-code-0 on a clean committed tree (`results[i].verification`). Then present the finalize gap report: per-FR met/partial/missing **and how each was verified** (`verifiedBy` — the executed test selector vs inspection/waiver, flagging any "met" established only by inspection), build/test/lint results, and the bottom line on whether the PRD is satisfied.
+   - **Halted** (`halted: true`) — name the stage (`atStage`) that stopped and quote the evidence, then recommend a route per the stop-and-report rule and **let the user choose — don't auto-resume**:
+     - `reason: "conflict"` / `"failed"` — quote the stage result's `detail`. Recommend a small local fix, a revised/appended stage, or a step back up the pipeline (`/pmf:prd` → `/pmf:doublecheck` → `/pmf:decompose`) when the plan no longer matches reality.
+     - `reason: "verification-failed"` — the independent verifier could not re-establish the stage's green on the committed state. Quote the specific evidence from that stage's `verification`: a dirty working tree (`cleanTreeEvidence` — the implementer likely committed only a subset of what made it green), a missing commit (`commitPresent: false`), or the failing acceptance command(s) (each `checks[]` entry's `command`, `exitCode`, and `outputTail`). Recommend completing/repairing the commit or fixing the failing command before re-running — do **not** paper over it by forcing the next stage.
 
 ## Guardrails
 
 - **Get explicit confirmation before launching** — this phase writes and commits code.
 - **Sequential, not parallel** — stages depend on each other's committed state; the engine runs them in order and must not be made concurrent.
-- **Honour the halt** — if the engine stopped on a conflict, surface it and recommend a fix; never paper over it by forcing the next stage.
+- **Honour the halt** — if the engine stopped (a conflict, a failed stage, or a failed independent verification), surface it with its evidence and recommend a fix; never paper over it by forcing the next stage.
