@@ -43,12 +43,19 @@ const FINALIZE_REPORT = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['id', 'status'],
+        required: ['id', 'status', 'verifiedBy'],
         additionalProperties: false,
         properties: {
           id: { type: 'string' },
           status: { type: 'string', enum: ['met', 'partial', 'missing'] },
-          evidence: { type: 'string', description: 'file:line for met; the specific absence for missing' },
+          verifiedBy: {
+            type: 'string',
+            enum: ['test', 'inspection'],
+            description: "test = established by EXECUTING the FR's recorded selector; inspection = established by reading code, allowed ONLY for inspection-only or waived FRs",
+          },
+          testCommand: { type: 'string', description: "For verifiedBy=test: the exact selector that was run (the FR's recorded acceptance command). Empty for inspection." },
+          testResult: { type: 'string', enum: ['pass', 'fail', 'n/a'], description: 'Result of running testCommand; n/a when verifiedBy=inspection' },
+          evidence: { type: 'string', description: 'For test: the selector output/summary. For inspection: file:line for met, the specific absence for missing.' },
         },
       },
     },
@@ -117,9 +124,14 @@ for (let i = 0; i < stages.length; i++) {
 
 phase('Finalize')
 
+const stageList = stages.map((s) => `\`${s}\``).join(', ')
+
 const report = await agent(
   `All decomposition stages are implemented and committed. Verify the WHOLE feature against its PRD \`${prd}\`, end to end.\n\n` +
-    `For every FR in the PRD, find the code that satisfies it and judge whether its acceptance criteria are actually met — mark each met / partial / missing with file:line evidence (or the specific absence). ` +
+    `The PRD classifies each FR as \`test-coverable\` or \`inspection-only\`. The stage files (${stageList || 'none passed'}) record, for each \`test-coverable\` FR, a **test selector** — the exact command that runs that FR's acceptance test — and may record a **test waiver**. Read the PRD for the classifications and the stage files for the selectors and any waiver.\n\n` +
+    `For every FR, establish whether it is met and record HOW in the schema's per-FR fields:\n` +
+    `- \`test-coverable\` FR → set verifiedBy="test": RUN its recorded selector, set testCommand to that selector and testResult to pass/fail, and base met/partial/missing on the actual result (a selector that resolves to no test is "missing"). EXECUTE it — do not substitute reading the code.\n` +
+    `- \`inspection-only\` FR, or any FR under a recorded waiver → set verifiedBy="inspection", testCommand empty, testResult="n/a": judge it by reading the code/artifact with file:line evidence. Use inspection ONLY for these — never to stand in for a selector that should have been run.\n\n` +
     `Check non-goals were respected and technical constraints honoured.\n\n` +
     `Then run the project's FULL build, test, and lint commands (discover them from AGENTS.md / CLAUDE.md) and capture the results.\n\n` +
     `Return the structured gap report. Do NOT fix anything — report only.`,

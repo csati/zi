@@ -38,7 +38,7 @@ This is the only phase that runs unattended. Phases 1–7 are interactive; do th
    Pass `stages` already ordered. The workflow runs in the background; you'll be notified when it finishes.
 
 5. **Report the outcome** when it returns:
-   - **Completed** — summarize which stages landed (and their commits), then present the finalize gap report: per-FR met/partial/missing, build/test/lint results, and the bottom line on whether the PRD is satisfied.
+   - **Completed** — summarize which stages landed (and their commits), then present the finalize gap report: per-FR met/partial/missing **and how each was verified** (`verifiedBy` — the executed test selector vs inspection/waiver, flagging any "met" established only by inspection), build/test/lint results, and the bottom line on whether the PRD is satisfied.
    - **Halted on conflict** — name the stage that stopped and quote its reason. Recommend the route per the stop-and-report rule: a small local fix, a revised/appended stage, or a step back up the pipeline (`/pmf:prd` → `/pmf:doublecheck` → `/pmf:decompose`) when the plan no longer matches reality. Let the user choose — don't auto-resume.
 
 ## Guardrails

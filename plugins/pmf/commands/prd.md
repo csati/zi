@@ -57,7 +57,9 @@ Only once **both** are true:
 Then assemble the PRD from the confirmed decisions:
 
 1. **Define goals** — 3-5 measurable objectives (SMART format preferred).
-2. **Write requirements** — each with acceptance criteria that verification can check.
+2. **Write requirements** — each with acceptance criteria that verification can check. **Classify every acceptance criterion `test-coverable` or `inspection-only`** and record that classification on the FR (see template). This classification travels downstream: decompose authors a test for each `test-coverable` FR, and finalize is only allowed to fall back to reading code for the `inspection-only` set.
+   - Phrase a `test-coverable` criterion so it can honestly become an automated unit/integration assertion — e.g. "CSV export's first row is the header `id,name,email`", not "the export looks right".
+   - Mark a criterion `inspection-only` **only when it genuinely cannot be a unit/integration assertion**: docs updated, a visual/UX outcome, a latency target with no load harness, or manual QA. **Do not force these into a test shape** — an honest `inspection-only` is better than a fake test.
 3. **Identify non-goals** — explicitly state what is out of scope.
 4. **Define user impact** — who benefits and how.
 5. **List assumptions** — what must be true for the plan to work.
@@ -112,6 +114,7 @@ Use this structure:
 {Description}
 
 - Acceptance: {testable criteria}
+- Verification: `test-coverable` | `inspection-only`{ — if inspection-only, one phrase on why it can't be an automated assertion: docs / visual-UX / latency-no-harness / manual QA}
 
 ### FR-2: {title}
 

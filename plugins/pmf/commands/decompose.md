@@ -41,6 +41,7 @@ Work through these phases. **Do not write any stage file until Phase 3 is approv
 1. Read the PRD in full. Extract every functional requirement (`FR-*`), technical constraint, non-goal, and acceptance criterion.
 2. Ground it in reality with `Read`/`Grep`/`Glob`: locate the modules, files, and patterns each requirement touches, and the project's actual **build / test / lint commands** (from its `AGENTS.md` / `CLAUDE.md`). Respect existing module boundaries.
 3. Build a dependency graph of the requirements: what must exist before what (shared models, ports/interfaces, schema, and DI wiring before the features that consume them; implementation before the integration that uses it).
+4. **Confirm a test harness exists.** From step 2, pin down the project's real test command and where tests live. If there is **no test harness** — no test command in `AGENTS.md` / `CLAUDE.md`, no test directories — the `test-coverable` FRs cannot be made executable. Surface this with `AskUserQuestion` **before slicing**, and let the user choose: (a) **add a harness** — name the framework and the test command a stage will stand up, so later stages can author against it; or (b) **waive tests** for the affected FRs. **Persist the choice as an artifact** (state travels in files, not this conversation): fold the chosen harness command into the stages that author tests, or record the waiver — which FRs it covers and that the user agreed — in the PRD or a dedicated note in a stage file, so the unattended finalize knows tests were waived by agreement rather than silently missing.
 
 ### Phase 2 — Slice into ordered stages
 
@@ -59,17 +60,18 @@ Estimate each stage's execution cost as the sum of:
 
 - **Context reads** — files the agent must read (a ~300-line source file ≈ 3–4K tokens; include the relevant PRD sections).
 - **Code produced** — files created/modified and their net diff.
-- **Verification** — running the build/test/lint commands, plus a buffer for one or two iterations.
+- **Test authoring** — for each `test-coverable` FR this stage completes, writing or extending its acceptance test(s): a read of the existing test file/fixtures plus the new test code. This is real diff, not free — count it as its own line, and re-balance the cuts so a stage that owns a feature *and* its test still lands under budget.
+- **Verification** — running the build/test/lint commands and the per-FR selectors, plus a buffer for one or two iterations.
 - **Overhead** — a safety buffer for reasoning and retries.
 
-Rule of thumb: a stage should read on the order of **≤ ~8–10 files** and produce a **bounded diff (≈ ≤ ~300 net lines)**. If a slice would exceed the budget, **split it**. If two adjacent slices are trivially small and share context, consider **merging** them — but never merge across a dependency that balloons the result. **N is whatever the budget dictates**, not a number picked up front.
+Rule of thumb: a stage should read on the order of **≤ ~8–10 files** and produce a **bounded diff (≈ ≤ ~300 net lines)**, test code included. If a slice would exceed the budget, **split it**. If two adjacent slices are trivially small and share context, consider **merging** them — but never merge across a dependency that balloons the result. **N is whatever the budget dictates**, not a number picked up front.
 
 ### Phase 3 — Propose the stage plan and confirm
 
 Before writing anything, present the proposed decomposition:
 
 - The stage count **N**.
-- For each stage: a one-line title, the FRs/scope it covers, its key files, what prior repo state it depends on, and an estimated token budget.
+- For each stage: a one-line title, the FRs/scope it covers, its key files, what prior repo state it depends on, and an estimated token budget. For any `test-coverable` FR a stage completes, name the **test selector** that stage will own — the exact command that runs that FR's tests (e.g. `pytest tests/export.py::test_csv_headers`).
 
 Use `AskUserQuestion` (or ask plainly) to confirm or adjust. **Do not write stage files until the user approves the breakdown.**
 
@@ -115,9 +117,10 @@ Read only what you need (kept small to stay in budget):
 
 ## Files this stage owns
 
-The files this stage creates or modifies — its exclusive ownership for the duration. Be exhaustive and specific; the decomposition review uses this list to detect cross-stage conflicts.
+The files this stage creates or modifies — its exclusive ownership for the duration. Be exhaustive and specific; the decomposition review uses this list to detect cross-stage conflicts. **If this stage completes a `test-coverable` FR, the test file(s) that encode its acceptance criteria are part of this ownership list** — name them explicitly.
 
 - `{path}` — {created | modified} — {what changes}
+- `{test path}` — {created | modified} — {the acceptance test(s) for the `test-coverable` FR(s) this stage completes}
 - ...
 
 ## Tasks
@@ -126,13 +129,17 @@ The files this stage creates or modifies — its exclusive ownership for the dur
 
 1. {Concrete, ordered step — describe the intent and the target interface/behaviour, not a paste of the final source. The implementing agent writes the actual code against the real repo.}
 2. ...
+{If this stage completes a `test-coverable` FR: include an explicit step to **author or extend that FR's acceptance test**, named so the selector in "Acceptance criteria" resolves to it. Describe *what* to assert — the behaviour and the cases — not literal test source.}
 
 ## Acceptance criteria
 
 - {Testable outcome.}
+- **FR-{N} proven:** `{exact selector that runs THIS FR's acceptance test — e.g. `pytest tests/export.py::test_csv_headers`, `go test ./export -run TestCSVHeaders`}` passes. This stage **authors or extends** that test to encode FR-{N}'s acceptance criteria; **name the test so this exact command runs it.** (One line per `test-coverable` FR this stage completes; omit for `inspection-only` FRs. If tests were waived in Phase 1, cite the recorded waiver instead of a selector.)
 - Build is green: `{exact build command}`
 - Tests pass: `{exact test command}`
 - {Lint/format if the project requires it: `{exact command}`}
+
+> The per-FR selector above is this stage's **own gate**, not just a note for finalize: the green check **runs that exact selector** and requires it to pass — not merely "include the new tests" as a vague set. Because the selector is written here *before the test exists*, naming the test to match it is what binds them. Any selector/test-name drift then surfaces **now**, as an ordinary red-test failure at stage time — instead of later in the unattended finalize, where a stale selector resolves to nothing and the FR falsely reads "missing" despite a perfectly good test existing. The same exact command is what `03`'s per-stage verifier and `01`'s re-verify re-run — one shared per-stage gate.
 
 ## Budget
 
@@ -152,6 +159,8 @@ On completion: {what is now true in the repo}. Commit with `{type}: {summary}`. 
 - **Read-first, stop on conflict.** Each stage instructs its agent to verify preconditions against the actual repo before editing, and to halt and report rather than force a plan that no longer matches reality.
 - **Aim under budget at planning time.** Estimate honestly with headroom and split any stage that *looks* likely to exceed ~50K tokens — but never bake a runtime cap into the stage file; the executing agent finishes its stage and reports actual usage.
 - **Green between stages.** No stage may leave the build or tests broken for the next agent.
+- **Executable acceptance for `test-coverable` FRs.** Every stage that completes a `test-coverable` FR (per the PRD classification) authors or extends that FR's test, lists the test file under "Files this stage owns", and records the FR's selector as an acceptance command the green gate actually runs. `inspection-only` FRs carry no such test. If the project has no harness, the Phase-1 waiver is recorded in place of a selector — never a silent gap.
+- **The stage that completes an FR owns its test.** When a `test-coverable` FR spans stages (foundation early, observable behaviour later), the stage that completes its **observable behaviour** authors the acceptance test and records the selector — not the foundation stage.
 - **Propose before writing.** Never emit stage files until the user has approved the Phase 3 breakdown.
 - **Don't implement.** This command plans only — it reads the codebase and writes plan files; it does not modify source.
 

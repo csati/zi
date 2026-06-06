@@ -1,7 +1,7 @@
 ---
 description: Verify a fully-implemented feature against its PRD end to end — every FR's acceptance criteria met, full build/test/lint green — and report the gaps. Run after the last /pmf:decompose stage is implemented.
 argument-hint: [path to the prd.md to verify against, or its task directory; defaults to the lone prd.md under .pmf/]
-allowed-tools: Bash(date:*), Bash(git:*), Read, Grep, Glob, AskUserQuestion, Write
+allowed-tools: Bash, Read, Grep, Glob, AskUserQuestion, Write
 ---
 
 # Finalize — verify the feature against its PRD
@@ -31,13 +31,18 @@ Confirm the resolved PRD path back to the user before proceeding.
 
 ### Phase 1 — Build the acceptance checklist
 
-1. Read the PRD in full. Extract every `FR-*` with its acceptance criteria, every success metric, every technical constraint, and every non-goal.
-2. If the paired `.pmf/{slug}/plan-stage-*.md` files exist (same task directory), read them to see what each stage claimed to deliver — but treat that as a claim to verify, not as truth.
+1. Read the PRD in full. Extract every `FR-*` with its acceptance criteria and its **`test-coverable` / `inspection-only` classification**, every success metric, every technical constraint, and every non-goal.
+2. If the paired `.pmf/{slug}/plan-stage-*.md` files exist (same task directory), read them to see what each stage claimed to deliver — but treat that as a claim to verify, not as truth. For each `test-coverable` FR, extract the **test selector** the stage recorded (the exact command that runs that FR's test), and note any persisted **test waiver** (which FRs it covers).
 3. Discover the project's real **build / test / lint** commands from its `AGENTS.md` / `CLAUDE.md`.
 
 ### Phase 2 — Verify each requirement against the code
 
-For every `FR-*`, ground the claim in reality with `Read`/`Grep`/`Glob`: find the code that satisfies it and judge whether its acceptance criteria are *actually* met. Mark each **met / partial / missing**, each with evidence — a `file:line` for "met", the specific absence for "missing". Do not take the plan's or the PRD's word for it; confirm against the committed code.
+For every `FR-*`, establish whether its acceptance criteria are *actually* met **and record how you verified it**:
+
+- **`test-coverable` FR** — **run the FR's recorded test selector** (the exact command captured in its stage file) and capture pass/fail and the relevant output. The selector passing is the evidence for "met"; a failure is "partial"/"missing"; a selector that resolves to no test is "missing". This is **execution, not inspection** — do not substitute reading the code for running the test.
+- **`inspection-only` FR (and any FR under a recorded waiver)** — there is no executable assertion by design, so verify by reading the code/artifact with `Read`/`Grep`/`Glob` and judging the criteria. **Say so explicitly** in the report: this FR was established by inspection (or waiver), not by a test.
+
+Mark each **met / partial / missing**, each with evidence — the selector's result for `test-coverable`, a `file:line` (or the specific absence) for `inspection-only`. Do not take the plan's or the PRD's word for it; confirm against the committed code.
 
 Also check the non-goals were respected (no out-of-scope scope crept in) and the technical constraints were honoured.
 
@@ -49,7 +54,7 @@ Run the full build, the full test suite, and the lint/format check. Capture pass
 
 Give the user a concise verdict:
 
-- A per-FR table: **met / partial / missing**, with evidence.
+- A per-FR table: **met / partial / missing**, **how it was verified** (test selector executed vs inspection/waiver), and the evidence (the selector and its result, or a `file:line`). Any "met" claimed by inspection rather than a test must be visibly flagged as such.
 - Build / test / lint results.
 - A prioritized **gap list** — what's missing or broken, each tied to its FR and the file.
 - A clear bottom line: **is the PRD fully satisfied, yes or no.**
@@ -67,5 +72,6 @@ Optionally, if the user wants a durable record, write the report to `.pmf/{slug}
 ## Guardrails
 
 - **Verify against reality** — every "met" points at real code; every "missing" at a real absence. No taking claims on trust.
+- **Execute, don't inspect, where a test exists** — a `test-coverable` FR is "met" only by running its recorded selector green. Reading the code stands in for a test **only** for `inspection-only` and waived FRs, and is flagged as such in the report.
 - **Report, don't fix** — this is the acceptance gate. Surface gaps, recommend a route, and let the user choose before any code changes.
 - **Whole-feature scope** — you are checking the integrated result and cross-stage interactions, not re-running per-stage checks.
