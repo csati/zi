@@ -40,9 +40,15 @@ Once phases 1–7 are done, `/pmf:implement-all .pmf/{slug}/prd.md` launches the
 workflow: it implements each `.pmf/{slug}/plan-stage-NN.md` with a **fresh agent, one at a
 time, in order**. After each stage a **separate verifier agent** independently re-runs that
 stage's acceptance commands against the committed state — so no stage advances on the
-implementer's word alone — and the run halts the moment a stage reports a precondition conflict
-or its verification fails. A final finalize pass then verifies the whole feature against the PRD
-and reports gaps.
+implementer's word alone — and then a **third agent adversarially reviews** the stage's commit
+diff for quality (correctness, security, edge cases, perf, conformance), not just completeness.
+Every review finding is a claim until independently confirmed for **both reality and severity**:
+a confirmed **minor** is auto-fixed and re-verified through the same green gate; a confirmed
+**major** halts the run for you to resolve. The run also halts the moment a stage reports a
+precondition conflict or its verification fails. A halt is **resumable** — once you resolve the
+stage (delegate or apply a fix, or waive with a reason), re-launch with `startAt` and the engine
+skips the already-committed stages. A final finalize pass then verifies the whole feature against
+the PRD and reports gaps.
 
 ## Install
 
@@ -83,7 +89,7 @@ pmf/                                   ← repo root = the "ncs-plugins" marketp
 │   ├── .claude-plugin/plugin.json
 │   ├── commands/   prompt, research, prd, decompose, doublecheck, finalize,
 │   │               pipeline, implement-all, stage, commit
-│   └── workflows/backhalf.js          ← the sequential implement→verify→finalize engine
+│   └── workflows/backhalf.js          ← the sequential implement→verify→review→finalize engine
 ├── README.md
 ├── CLAUDE.md
 └── LICENSE

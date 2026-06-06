@@ -116,10 +116,30 @@ baked into its design — keep them if you modify it:
   It is a **bash proxy, not a judge** — it reports raw facts; the pass/fail decision is mechanical
   (`verificationPassed()`), never the agent's discretion. A failed gate halts the run
   (`reason: "verification-failed"`). It runs strictly between stages, leaves the tree as it found
-  it, and is the single reusable gate that any review-driven fix re-enters (see todo `01`).
+  it, and is the single reusable gate that any review-driven fix (and any resume) re-enters.
+- **Adversarial review per stage.** After a stage is green, a *separate* reviewer (`reviewStage()`,
+  never the implementer) reads only that stage's commit diff and asks whether it is **good**, not
+  just green — correctness/security/edge-case/perf bugs and conformance to the surrounding code. The
+  per-stage tail is **implement → verify → review → confirm → (minor: fix → re-verify | major: halt)
+  → advance**, each step finishing before the next. A reviewer never confirms its own findings: every
+  finding is a claim until independently confirmed for **both reality and severity**. A reviewer-`minor`
+  is confirmed-and-fixed by a fix agent (`fixMinors()`) and re-enters the green gate (the re-verify is
+  the green gate only, never a second review); a reviewer-`major` is substantiated by a dedicated
+  confirmer (`confirmMajors()`, a third perspective) and, only if confirmed, **halts**
+  (`reason: "review-major"`). Reviewer/confirmer never re-run the suite — only the post-fix re-verify
+  does, and only when a minor was actually fixed; a clean stage pays for no second gate.
+- **Resumable halts.** A halt returns and stops; `args.startAt` (a 1-based index or stage path)
+  re-launches from a resolved stage — earlier stages are skipped as trusted-committed, the resolved
+  stage is re-verified through the green gate (not re-implemented/re-reviewed), and later stages run
+  the full tail. `/pmf:implement-all` drives resolution (delegate/manual fix, or waive-with-reason)
+  and the relaunch.
 - **Structured returns.** Agents are forced to a JSON schema (`STAGE_RESULT`, `VERIFICATION_RESULT`,
-  `FINALIZE_REPORT`) so results are validated data, not prose. Per-stage verifier evidence attaches
-  at `results[i].verification`. The finalize agent only reports gaps; it does not fix.
+  `REVIEW_RESULT`, `CONFIRM_RESULT`, `FIX_RESULT`, `FINALIZE_REPORT`) so results are validated data,
+  not prose. Per-stage verifier evidence attaches at `results[i].verification`; the review audit
+  trail (each finding with `confirmed`, `resolution`, `resolvedBy`) at `results[i].review`. The
+  workflow only emits the resolutions it decided (`fixed`/`halted`/`dropped`); `waived-with-reason`
+  and a *delegated* `fixed` are stamped by the orchestrating layer on resume. The finalize agent only
+  reports gaps; it does not fix.
 
 ## Cross-cutting principles encoded in these commands
 
