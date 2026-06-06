@@ -24,9 +24,9 @@ The repo root is the marketplace; `plugins/pmf/` is the plugin. For local develo
 repo itself as a marketplace:
 
 ```
-/plugin marketplace add /Users/ncs/dev/claude/plugins/pmf   # register this repo as a marketplace
-/plugin install pmf@ncs-plugins                             # install the plugin
-/plugin validate /Users/ncs/dev/claude/plugins/pmf          # validate before installing
+/plugin marketplace add /path/to/pmf   # register this repo as a marketplace
+/plugin install pmf@ncs-plugins     # install the plugin
+/plugin validate /path/to/pmf          # validate before installing
 ```
 
 To share with colleagues, push the repo to a git host; they run `/plugin marketplace add

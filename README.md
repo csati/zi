@@ -62,11 +62,11 @@ to `marketplace.json`, which downloads only the catalog and none of the plugin f
 ### Local development
 
 ```
-/plugin marketplace add /Users/ncs/dev/claude/plugins/pmf   # this repo, as a local marketplace
+/plugin marketplace add /path/to/pmf   # this repo, as a local marketplace
 /plugin install pmf@ncs-plugins
 ```
 
-Validate first if you like: `/plugin validate /Users/ncs/dev/claude/plugins/pmf`.
+Validate first if you like: `/plugin validate /path/to/pmf`.
 
 Editing the command `.md` files under `plugins/pmf/commands/` is picked up live. If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
