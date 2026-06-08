@@ -20,6 +20,12 @@ export const meta = {
 //                  re-implemented or re-reviewed — then the loop advances. Stages
 //                  after it run the full implement→verify→review tail. Absent ⇒
 //                  a fresh run from stage 1. See resolveStartIndex() below.
+//   args.baseRef — OPTIONAL audit field: the pre-run HEAD SHA that the
+//                  /implement-all command captured before any branch switch. The
+//                  script does NOT act on it (branch management lives entirely in
+//                  the interactive command); it only echoes it back in every
+//                  return so the rollback anchor lands in the audit trail. Absent
+//                  on resume and on older callers.
 //
 // Paths are relative to the repo working directory (the pipeline keeps each
 // feature's artifacts together in a .pmf/{slug}/ task directory). The script has
@@ -398,10 +404,14 @@ function resolveStartIndex(stages, startAt) {
 
 const stages = Array.isArray(args && args.stages) ? args.stages : []
 const prd = args && args.prd
+// Rollback anchor captured by the command before any branch switch. Echoed back
+// in every return for the audit trail; the script never acts on it. Absent ⇒
+// the key is simply omitted from the serialized result.
+const baseRef = (args && args.baseRef) || undefined
 
 if (!stages.length) {
   log('No stage files passed in args.stages — nothing to implement. Run /decompose first.')
-  return { halted: true, reason: 'no-stages', results: [] }
+  return { halted: true, reason: 'no-stages', results: [], baseRef }
 }
 
 phase('Implement')
@@ -441,7 +451,7 @@ for (let i = 0; i < stages.length; i++) {
     results.push(resumedEntry)
     if (!verificationPassed(rever)) {
       log(`Halting at ${file}: resume re-verification failed — ${verificationSummary(rever)}`)
-      return { halted: true, reason: 'verification-failed', atStage: file, atStageIndex: i + 1, results }
+      return { halted: true, reason: 'verification-failed', atStage: file, atStageIndex: i + 1, results, baseRef }
     }
     log(`Stage ${n} re-verified green on resume — advancing.`)
     continue
@@ -465,7 +475,7 @@ for (let i = 0; i < stages.length; i++) {
     const status = res ? res.status : 'null'
     const detail = res ? res.detail : 'agent returned no result'
     log(`Halting at ${file}: status="${status}" — ${detail}`)
-    return { halted: true, reason: status, atStage: file, atStageIndex: i + 1, results }
+    return { halted: true, reason: status, atStage: file, atStageIndex: i + 1, results, baseRef }
   }
 
   log(`Stage ${n} implemented: ${res.commit || '(no commit subject reported)'} — verifying`)
@@ -479,7 +489,7 @@ for (let i = 0; i < stages.length; i++) {
 
   if (!verificationPassed(ver)) {
     log(`Halting at ${file}: independent verification failed — ${verificationSummary(ver)}`)
-    return { halted: true, reason: 'verification-failed', atStage: file, atStageIndex: i + 1, results }
+    return { halted: true, reason: 'verification-failed', atStage: file, atStageIndex: i + 1, results, baseRef }
   }
 
   log(`Stage ${n} verified green on the committed state.`)
@@ -585,7 +595,7 @@ for (let i = 0; i < stages.length; i++) {
     })
     const titles = confirmedMajors.map((a) => `${a.file}${a.line ? ':' + a.line : ''} — ${a.claim}`).join('; ')
     log(`Halting at ${file}: ${confirmedMajors.length} confirmed major review finding(s) — ${titles}`)
-    return { halted: true, reason: 'review-major', atStage: file, atStageIndex: i + 1, results }
+    return { halted: true, reason: 'review-major', atStage: file, atStageIndex: i + 1, results, baseRef }
   }
 
   // 3) No confirmed major: confirm-and-fix the minor pool (reviewer minors plus
@@ -630,7 +640,7 @@ for (let i = 0; i < stages.length; i++) {
       entry.reverification = rever
       if (!verificationPassed(rever)) {
         log(`Halting at ${file}: re-verification after the minor fix failed — ${verificationSummary(rever)}`)
-        return { halted: true, reason: 'verification-failed', atStage: file, atStageIndex: i + 1, results }
+        return { halted: true, reason: 'verification-failed', atStage: file, atStageIndex: i + 1, results, baseRef }
       }
       log(`Stage ${n}: minor fix re-verified green — advancing.`)
     } else {
@@ -657,4 +667,4 @@ const report = await agent(
   { label: 'finalize', phase: 'Finalize', schema: FINALIZE_REPORT },
 )
 
-return { halted: false, results, report }
+return { halted: false, results, report, baseRef }
