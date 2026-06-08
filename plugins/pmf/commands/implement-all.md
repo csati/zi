@@ -1,7 +1,7 @@
 ---
 description: Auto-run the pipeline back half — implement every /pmf:decompose stage with a fresh agent in order, independently verify and adversarially review each (halting on conflict or a confirmed major finding), then finalize against the PRD. Run once phases 1–7 (prompt→…→reviewed decomposition) are done.
 argument-hint: [path to the prd.md whose stages to implement, or its task directory; defaults to the lone prd.md under .pmf/]
-allowed-tools: Bash(date:*), Bash(git:*), Read, Glob, AskUserQuestion, Workflow, Task
+allowed-tools: Bash(git:*), Read, Glob, AskUserQuestion, Workflow, Task
 ---
 
 # Implement all stages + finalize
@@ -87,6 +87,7 @@ This is the only phase that runs unattended. Phases 1–7 are interactive; do th
 
 ## Guardrails
 
+- **Permissions & blast radius** — this command's `allowed-tools` governs only its *own* turn (resolve the PRD, gather stages, branch-isolate, confirm, launch). The agents it spawns are **not** bounded by that scope — `allowed-tools` does not transitively constrain a `Workflow` or `Task` subagent. The `Workflow` engine's stage/verify/review/finalize agents (step 5) run the project's real build/test/lint commands, and the `Task` agent that resolves a `review-major` halt (step 7) edits the live repo, runs the suite, and `git` commits — all unattended, each with its own tool access. The real containment for this phase is the **branch-isolation step** ("Isolate the run on a branch", step 4) plus the **explicit pre-launch confirmation** (step 3), not `allowed-tools`: a bad run is one `git reset --hard {baseSHA}` (or deleting the run's branch) to undo.
 - **Get explicit confirmation before launching** — this phase writes and commits code. Fold the branch + stash decisions (step 4) into that same pre-launch gate.
 - **Isolate where the commits land** — on every fresh launch let the user choose the branch and, if the tree is dirty, stash-or-abort *before* the engine starts; capture a base SHA so a bad run is one `git reset --hard` to undo. Mutate in safe order (stash before `git switch -c`) and never `git stash pop` automatically. Branch management lives in this command, never in `backhalf.js` (it has no filesystem access and stays a pure orchestrator). On resume, skip the branch/stash prompts and stay on the run's branch.
 - **Sequential, not parallel** — stages depend on each other's committed state; the engine runs them in order and must not be made concurrent.
