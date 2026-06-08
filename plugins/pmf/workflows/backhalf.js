@@ -212,13 +212,13 @@ const FINALIZE_REPORT = {
 // re-establishes the green claim against the COMMITTED repo state before the
 // next stage runs — the implementer never advances on its own word. The verifier
 // is a bash proxy, NOT a judge: it runs the stage's exact acceptance commands and
-// reports raw facts (exit codes, clean-tree, commit-present); the PASS/FAIL
-// decision is made mechanically by `verificationPassed()` below, not by the agent.
+// reports raw facts (exit codes, clean-tree, commit-present); the pass/warn/fail
+// decision is made mechanically by `gateStatus()` below, not by the agent.
 // This same step is the one shared per-stage gate that 01's review-driven fixes
 // re-enter — keep it a single reusable function, not two re-verify mechanisms.
 const VERIFICATION_RESULT = {
   type: 'object',
-  required: ['cleanTree', 'commitPresent', 'checks'],
+  required: ['cleanTree', 'commitPresent', 'checks', 'noRunnableCommands'],
   additionalProperties: false,
   properties: {
     cleanTree: {
@@ -252,63 +252,191 @@ const VERIFICATION_RESULT = {
         },
       },
     },
+    noRunnableCommands: {
+      type: 'boolean',
+      description:
+        "TRUE only when STEP 1 actually read the stage's Acceptance criteria and it names NO runnable command at all (tests waived in /decompose, and no build/lint listed) — an affirmative declaration that there is nothing to run, paired with an empty checks list. NEVER true merely because you skipped extraction, could not read the file, ran out of time, or the tree was dirty: those keep an empty checks list WITHOUT this flag and stay a failure. Whenever you extracted one or more commands, set false.",
+    },
     restoredClean: {
       type: 'boolean',
       description: 'After re-running the checks and restoring, the working tree is back to the committed state (no leftover build artifacts outside gitignored paths or `.pmf/`).',
+    },
+    ownershipExtras: {
+      type: 'array',
+      items: { type: 'string' },
+      description:
+        'Paths the stage\'s commit changed that are ABSENT from its declared "## Files this stage owns" list (`.pmf/` artifacts excluded). OPTIONAL — defaults to [] when omitted; left empty on the resume re-verify, which has no fresh stage commit to scope. You only REPORT these; the workflow, not you, decides what to do with them.',
     },
     detail: { type: 'string', description: 'Brief factual summary of what was run. NOT a judgment of whether the acceptance criteria are met.' },
   },
 }
 
-const verifierPrompt = (file, expectedCommit) =>
-  `You are an INDEPENDENT VERIFIER for ONE stage of a decomposed feature, running with a fresh context. ` +
-  `You did NOT implement this stage and you are NOT a judge. Your only job is to mechanically re-establish — against the COMMITTED repo state — that the stage's green claim is real, then report raw facts. ` +
-  `You are a bash proxy: run the exact commands the stage names and record their exit codes and output. ` +
-  `Do NOT interpret whether the acceptance criteria are "met", do NOT edit, fix, stage, commit, or re-implement anything, and do NOT run any command the stage does not name (beyond the git status/log and tree-restore commands described below).\n\n` +
-  `The stage just reported done with commit subject: "${expectedCommit || '(none reported)'}".\n\n` +
-  `STEP 1 — extract the acceptance commands. Read the stage file at \`${file}\` (a path relative to the repo working directory). From its "## Acceptance criteria" section, collect VERBATIM every runnable command it names:\n` +
-  `  - each per-FR selector ("FR-N proven: \`<selector>\` passes"),\n` +
-  `  - the build command ("Build is green: \`<cmd>\`"),\n` +
-  `  - the test command ("Tests pass: \`<cmd>\`"),\n` +
-  `  - the lint/format command, if one is listed.\n` +
-  `Use each command exactly as written — never re-derive, substitute, broaden, or "improve" it. If the section names no runnable command (e.g. tests were waived and no build/lint is listed), record an empty checks list and say so in detail — do NOT invent one.\n\n` +
-  `STEP 2 — confirm a clean COMMITTED state. Before running any acceptance command, run \`git status --porcelain\`. Treat the tree as clean ONLY if it shows nothing outside the \`.pmf/\` pipeline-artifact directory: untracked \`.pmf/...\` planning files are expected and do NOT count as dirty, but ANY tracked modification, or any untracked file outside \`.pmf/\`, DOES. A dirty tree means the implementer's green may reflect uncommitted edits rather than the commit — set cleanTree=false, put the verbatim \`git status --porcelain\` output in cleanTreeEvidence, and treat the verification as failed (you may skip STEP 3). If clean, set cleanTree=true and record the (empty) output in cleanTreeEvidence. Then confirm the commit: run \`git log -1 --format='%h %s'\` (and \`git log --oneline -5\` for context). ${expectedCommit ? 'Set commitPresent=true and record it in `commit` only if a commit matching the reported subject is at or near HEAD.' : "No specific commit subject was reported (this is a RESUME re-verify of a stage whose halt was already resolved, so the work may have been amended or followed up by a separate fix). Set commitPresent=true if HEAD is a real commit on the current branch and the tree is clean — i.e. the stage's work IS committed — and record HEAD's hash+subject in `commit`."}\n\n` +
-  `STEP 3 — re-run the acceptance commands (only if the tree was clean). Run each command from STEP 1, in the order listed. For each, capture its real exit code and the last ~20 lines of combined stdout/stderr, and add one checks[] entry with the verbatim command, its kind, the exit code, and the output tail. Report exit codes faithfully — NEVER report 0 for a command you did not actually run to completion, and never paper over a non-zero exit.\n\n` +
-  `STEP 4 — leave the working tree exactly as you found it. Re-running build/test can emit artifacts, and both the next stage and the next verifier assume a clean tree. Restore the committed state WITHOUT deleting gitignored caches or the \`.pmf/\` artifacts: revert tracked changes with \`git checkout -- .\`, then remove only build artifacts that newly appeared outside \`.pmf/\` and are not gitignored (e.g. \`git clean -fd -e .pmf\` — no \`-x\`, so gitignored caches stay). Run \`git status --porcelain\` once more and set restoredClean=true if the tree is back to the committed state (ignoring \`.pmf/\`), else false with the residue noted in detail.\n\n` +
-  `Return the structured result — raw facts only. Whether the stage PASSES is decided mechanically by the workflow from your cleanTree, commitPresent, and per-command exit codes, NOT by you. Do not soften, omit, or pre-judge a non-zero exit code or a dirty tree.`
+const verifierPrompt = (file, expectedCommit, opts = {}) => {
+  const { checkOwnership = true, fixCommitMode = null } = opts
+  // STEP 2b — the commit-ownership axis (04). Reported by the verifier, classified
+  // by the workflow. Skipped on the resume re-verify (a deliberate human/delegated
+  // fix may legitimately touch non-owned files), where it leaves the list empty.
+  const ownershipStep = checkOwnership
+    ? `STEP 2b — check the commit's file ownership (report only — the workflow, not you, decides what to do with the result). ` +
+      `Read the "## Files this stage owns" section of the stage file \`${file}\` (the same file you read in STEP 1). Each entry is a markdown list item whose first backtick-quoted token is the path (e.g. \`- \`src/foo.js\` — modified — …\`); extract that backtick-quoted path from every bullet under that section. That set is the stage's declared ownership allow-list. ` +
+      `Then list the files the stage's commit ACTUALLY changed: ` +
+      (fixCommitMode === 'follow-up'
+        ? `the stage's work here spans TWO commits — the stage commit at HEAD~1 and a follow-up fix commit at HEAD — so take the UNION of the names from \`git show --name-only --format= HEAD~1\` and \`git show --name-only --format= HEAD\`. `
+        : `run \`git show --name-only --format= HEAD\` (the stage's single commit, which you confirmed at HEAD in STEP 2). `) +
+      `Compute ownershipExtras = every changed path that matches NONE of the ownership entries, applying these rules to repo-relative paths (strip any leading \`./\`):\n` +
+      `  - EXCLUDE every path under \`.pmf/\`: pipeline artifacts are always exempt and are never an extra.\n` +
+      `  - An ownership entry that names a file matches that EXACT path only.\n` +
+      `  - An ownership entry that names a directory (it ends with \`/\`, or clearly denotes a directory rather than a file) matches any changed path UNDER it (prefix match at the \`/\` boundary).\n` +
+      `  - If an entry contains a \`*\` glob, match it by the literal prefix up to the first \`*\` only; do not otherwise expand or interpret globs.\n` +
+      `  - When you are UNSURE whether a changed path is covered, do NOT list it as an extra — a false positive here is worse than a miss, since the implementer was already instructed to scope its own commit and this is only a backstop.\n` +
+      `Put the resulting (possibly empty) list in ownershipExtras. Do NOT judge, halt, fix, or react to it — only report; the workflow classifies it.\n\n`
+    : `STEP 2b — SKIP the file-ownership check on this resume re-verify: set ownershipExtras to an empty list ([]). HEAD may legitimately carry a deliberate human or delegated fix that touches files outside the stage's original ownership, so no ownership comparison is performed here.\n\n`
+  return (
+    `You are an INDEPENDENT VERIFIER for ONE stage of a decomposed feature, running with a fresh context. ` +
+    `You did NOT implement this stage and you are NOT a judge. Your only job is to mechanically re-establish — against the COMMITTED repo state — that the stage's green claim is real, then report raw facts. ` +
+    `You are a bash proxy: run the exact commands the stage names and record their exit codes and output. ` +
+    `Do NOT interpret whether the acceptance criteria are "met", do NOT edit, fix, stage, commit, or re-implement anything, and do NOT run any command the stage does not name (beyond the git status/log/show and tree-restore commands described below).\n\n` +
+    `The stage just reported done with commit subject: "${expectedCommit || '(none reported)'}".\n\n` +
+    `STEP 1 — extract the acceptance commands. Read the stage file at \`${file}\` (a path relative to the repo working directory). From its "## Acceptance criteria" section, collect VERBATIM every runnable command it names:\n` +
+    `  - each per-FR selector ("FR-N proven: \`<selector>\` passes"),\n` +
+    `  - the build command ("Build is green: \`<cmd>\`"),\n` +
+    `  - the test command ("Tests pass: \`<cmd>\`"),\n` +
+    `  - the lint/format command, if one is listed.\n` +
+    `Use each command exactly as written — never re-derive, substitute, broaden, or "improve" it. If — and ONLY if — you read the Acceptance criteria and it genuinely names no runnable command (e.g. tests were waived in /decompose and no build/lint is listed), record an empty checks list AND set noRunnableCommands=true as a deliberate, affirmative declaration that there is nothing to run, and say so in detail — do NOT invent one. Set noRunnableCommands=true ONLY in that case: NEVER because you skipped extraction, could not read the stage file, ran out of time, or the tree was dirty — those keep checks empty but leave noRunnableCommands=false (and stay a failure). Whenever you extract one or more commands, set noRunnableCommands=false.\n\n` +
+    `STEP 2 — confirm a clean COMMITTED state. Before running any acceptance command, run \`git status --porcelain\`. Treat the tree as clean ONLY if it shows nothing outside the \`.pmf/\` pipeline-artifact directory: untracked \`.pmf/...\` planning files are expected and do NOT count as dirty, but ANY tracked modification, or any untracked file outside \`.pmf/\`, DOES. A dirty tree means the implementer's green may reflect uncommitted edits rather than the commit — set cleanTree=false, put the verbatim \`git status --porcelain\` output in cleanTreeEvidence, and treat the verification as failed (you may skip STEP 3). If clean, set cleanTree=true and record the (empty) output in cleanTreeEvidence. Then confirm the commit: run \`git log -1 --format='%h %s'\` (and \`git log --oneline -5\` for context). ${expectedCommit ? 'Set commitPresent=true and record it in `commit` only if a commit matching the reported subject is at or near HEAD.' : "No specific commit subject was reported (this is a RESUME re-verify of a stage whose halt was already resolved, so the work may have been amended or followed up by a separate fix). Set commitPresent=true if HEAD is a real commit on the current branch and the tree is clean — i.e. the stage's work IS committed — and record HEAD's hash+subject in `commit`."}\n\n` +
+    ownershipStep +
+    `STEP 3 — re-run the acceptance commands (only if the tree was clean). Run each command from STEP 1, in the order listed. For each, capture its real exit code and the last ~20 lines of combined stdout/stderr, and add one checks[] entry with the verbatim command, its kind, the exit code, and the output tail. Report exit codes faithfully — NEVER report 0 for a command you did not actually run to completion, and never paper over a non-zero exit.\n\n` +
+    `STEP 4 — leave the working tree exactly as you found it. Re-running build/test can emit artifacts, and both the next stage and the next verifier assume a clean tree. Restore the committed state WITHOUT deleting gitignored caches or the \`.pmf/\` artifacts: revert tracked changes with \`git checkout -- .\`, then remove only build artifacts that newly appeared outside \`.pmf/\` and are not gitignored (e.g. \`git clean -fd -e .pmf\` — no \`-x\`, so gitignored caches stay). Run \`git status --porcelain\` once more and set restoredClean=true if the tree is back to the committed state (ignoring \`.pmf/\`), else false with the residue noted in detail.\n\n` +
+    `Return the structured result — raw facts only. Whether the stage PASSES is decided mechanically by the workflow from your cleanTree, commitPresent, and per-command exit codes, NOT by you. Do not soften, omit, or pre-judge a non-zero exit code or a dirty tree.`
+  )
+}
 
 // Spawn the verifier for one stage. A reusable step so 01's review-driven fixes
 // re-enter the identical gate (same commands, clean-tree + commit check).
-async function verifyStage(file, n, expectedCommit) {
-  return await agent(verifierPrompt(file, expectedCommit), {
+async function verifyStage(file, n, expectedCommit, opts = {}) {
+  return await agent(verifierPrompt(file, expectedCommit, opts), {
     label: `verify-${n}`,
     phase: 'Verify',
     schema: VERIFICATION_RESULT,
   })
 }
 
-// The gate is mechanical: clean tree (pre-checks) + commit present + at least one
-// acceptance command, all returning exit code 0. No discretion lives here either.
-function verificationPassed(ver) {
-  return !!(
-    ver &&
-    ver.cleanTree === true &&
-    ver.commitPresent === true &&
-    Array.isArray(ver.checks) &&
-    ver.checks.length > 0 &&
-    ver.checks.every((c) => c && c.exitCode === 0)
-  )
+// The single mechanical gate. Returns one of three statuses from the verifier's
+// raw facts — no discretion lives here either:
+//   'fail' — dirty tree, missing commit, any present check with a non-zero exit,
+//            OR an empty checks list WITHOUT the verifier's affirmative
+//            noRunnableCommands flag (the sloppy / failed-extraction case, kept
+//            fail-closed so a verifier that simply didn't look never advances).
+//   'warn' — clean tree + commit present + the verifier AFFIRMATIVELY declared no
+//            runnable command (noRunnableCommands===true) and so ran none. The one
+//            path that advances UNVERIFIED-BY-TEST: a deliberately command-less
+//            stage (tests waived, docs-only, or a build-less/interpreted project).
+//   'pass' — clean tree + commit present + at least one check, all exit 0.
+// Both anti-cheat axes are guarded here: warn still requires a clean tree + commit
+// present (a waived stage must really have committed), and requires the verifier's
+// deliberate flag (empty checks ALONE never warns). All three call sites consume
+// THIS one function (via gateOutcome) so the gate stays a single reusable decision,
+// not a boolean plus per-site sibling predicates one forgotten `|| vacuous` from
+// silently reinstating the halt on a single path.
+function gateStatus(ver) {
+  if (!ver || ver.cleanTree !== true || ver.commitPresent !== true) return 'fail'
+  const checks = Array.isArray(ver.checks) ? ver.checks : []
+  if (checks.length === 0) {
+    // Empty checks is ambiguous — a genuine waiver vs a verifier that failed to
+    // extract a real command. Only the verifier's affirmative flag makes it a
+    // warn; without it, stay fail-closed.
+    return ver.noRunnableCommands === true ? 'warn' : 'fail'
+  }
+  return checks.every((c) => c && c.exitCode === 0) ? 'pass' : 'fail'
 }
 
-// A concise human-readable reason the gate failed, for the halt log.
+// Apply the single gate uniformly at every call site. Returns the status; on
+// 'warn' it stamps unverifiedByTest on the verification object — so the report,
+// /implement-all, and finalize can flag a stage that had no executable gate (no
+// silent caps: the user must see which stages advanced without a test) — and logs
+// the UNVERIFIED-BY-TEST advance line. The caller halts on 'fail', advances on
+// 'pass'/'warn'.
+function gateOutcome(ver, n) {
+  const status = gateStatus(ver)
+  if (status === 'warn') {
+    if (ver) ver.unverifiedByTest = true
+    log(
+      `Stage ${n} verified: clean tree + commit present, but the stage names NO runnable acceptance command — advancing UNVERIFIED-BY-TEST.`,
+    )
+  }
+  return status
+}
+
+// A concise human-readable reason the gate did not cleanly pass, for the halt log.
+// cleanTree / commitPresent are checked first so a dirty tree with zero checks
+// still reports the dirty-tree message, not the zero-checks one.
 function verificationSummary(ver) {
   if (!ver) return 'verifier returned no result'
   if (ver.cleanTree !== true) return `working tree not clean before checks: ${ver.cleanTreeEvidence || '(no evidence)'}`
   if (ver.commitPresent !== true) return 'stage commit not found at/near HEAD'
-  if (!Array.isArray(ver.checks) || ver.checks.length === 0) return 'no acceptance commands found to re-run'
+  if (!Array.isArray(ver.checks) || ver.checks.length === 0) {
+    return ver.noRunnableCommands === true
+      ? 'stage names no runnable acceptance command (verifier affirmed it) — advanced UNVERIFIED-BY-TEST'
+      : 'no acceptance commands found to re-run, and the verifier did not affirm the stage is command-less — treated as a failed/skipped extraction'
+  }
   const failed = ver.checks.filter((c) => !c || c.exitCode !== 0)
   if (failed.length) return failed.map((c) => `\`${c.command}\` exited ${c ? c.exitCode : '?'}`).join('; ')
   return ver.detail || 'unknown verification failure'
+}
+
+// --- Commit-ownership axis (04) ---------------------------------------------
+// The implementer is told to scope its commit to the stage's declared "Files
+// this stage owns" list (STEP 4 of the implementer prompt). The verifier reports
+// any committed file absent from that list as `ownershipExtras` (STEP 2b). This
+// axis classifies those extras. It is DELIBERATELY a separate function from
+// gateStatus — never folded into its `warn` — so 03's UNVERIFIED-BY-TEST message
+// and `unverifiedByTest` flag stay untouched on a fully-tested stage that merely
+// drifted; the call site combines the two orthogonal axes and neither mutates the
+// other. Part A (scoping the implementer's commit) is the real guard; this is
+// after-the-fact detection — by the time we see a committed secret it is already
+// in branch history, so a 'secret' halts loudly and routes to a human rewrite.
+
+// Secret-shaped paths, mirrored from the bundled /pmf:stage command: a basename
+// starting with `.env`, any path containing "credentials", or a `.key`/`.pem`
+// extension. A file of this shape must never be auto-committed unless the stage
+// explicitly owns it.
+const SECRET_SHAPE = [/(^|\/)\.env[^/]*$/, /credentials/i, /\.key$/, /\.pem$/]
+const isSecretPath = (p) => typeof p === 'string' && SECRET_SHAPE.some((re) => re.test(p))
+
+// Classify the verifier's ownershipExtras into the ownership axis:
+//   'secret' — ≥1 extra is secret-shaped (already in branch history → HALT).
+//   'drift'  — extras exist, none secret-shaped (advance, but log + surface them).
+//   'ok'     — no extras: the commit stayed within its declared ownership, OR the
+//              axis was skipped (the resume re-verify leaves the list empty).
+function ownershipStatus(ver) {
+  const extras = ver && Array.isArray(ver.ownershipExtras) ? ver.ownershipExtras : []
+  if (!extras.length) return 'ok'
+  return extras.some(isSecretPath) ? 'secret' : 'drift'
+}
+
+// Apply the ownership axis at a call site: return 'halt' | 'advance', logging
+// either way. Mirrors gateOutcome's split — this decides + logs, the caller does
+// the actual halt `return` so `results`/`baseRef` stay local to the loop. `what`
+// names the commit under scrutiny ("stage commit" / "minor-fix commit").
+function ownershipOutcome(ver, n, file, what) {
+  const status = ownershipStatus(ver)
+  if (status === 'ok') return 'advance'
+  const extras = ver && Array.isArray(ver.ownershipExtras) ? ver.ownershipExtras : []
+  if (status === 'secret') {
+    const secrets = extras.filter(isSecretPath)
+    const others = extras.filter((p) => !isSecretPath(p))
+    log(
+      `Halting at ${file}: stage ${n}'s ${what} added secret-shaped file(s) OUTSIDE its declared ownership — ${secrets.join(', ')}. ` +
+        `These are already committed to branch history; a human must rewrite the commit, then resume.` +
+        (others.length ? ` Other non-owned files in the same commit: ${others.join(', ')}.` : ''),
+    )
+    return 'halt'
+  }
+  log(
+    `Stage ${n}: ${what} touched file(s) outside its declared ownership — ${extras.join(', ')}. ` +
+      `Advancing; the scope drift is surfaced in the verification record.`,
+  )
+  return 'advance'
 }
 
 // --- Adversarial review agents (01) -----------------------------------------
@@ -446,14 +574,18 @@ for (let i = 0; i < stages.length; i++) {
   // (a fix is never re-reviewed; a waiver changed no code and stays green).
   if (resuming && i === startIndex) {
     log(`Re-verifying resolved stage ${n} on the committed state before advancing.`)
-    const rever = await verifyStage(file, n, '')
+    // Skip the ownership axis (04) on resume: HEAD may carry a deliberate
+    // human/delegated fix that legitimately touches non-owned files, so an
+    // ownership check here would manufacture a false halt.
+    const rever = await verifyStage(file, n, '', { checkOwnership: false })
     const resumedEntry = { file, result: { status: 'resumed', detail: 'halt resolved by the orchestrating layer; re-verified only on resume' }, verification: rever }
     results.push(resumedEntry)
-    if (!verificationPassed(rever)) {
+    const resumeStatus = gateOutcome(rever, n)
+    if (resumeStatus === 'fail') {
       log(`Halting at ${file}: resume re-verification failed — ${verificationSummary(rever)}`)
       return { halted: true, reason: 'verification-failed', atStage: file, atStageIndex: i + 1, results, baseRef }
     }
-    log(`Stage ${n} re-verified green on resume — advancing.`)
+    if (resumeStatus === 'pass') log(`Stage ${n} re-verified green on resume — advancing.`)
     continue
   }
 
@@ -464,7 +596,12 @@ for (let i = 0; i < stages.length; i++) {
       `If any precondition is false, or the plan contradicts what the code now shows, DO NOT work around it: return status "conflict" with a precise explanation of the mismatch, and STOP without editing anything.\n\n` +
       `STEP 2 — implement. Otherwise carry out the plan's Tasks. Describe-to-code yourself against the real repo; the plan states intent, not literal source.\n\n` +
       `STEP 3 — make it green. Satisfy the stage's Acceptance criteria: the exact build, test, and lint commands named in the plan must pass. If you cannot get them green, return status "failed" with the failing output.\n\n` +
-      `STEP 4 — commit and report. On success, commit as the plan's Handoff instructs, then return status "done" with the commit subject and your approximate token usage.`,
+      `STEP 4 — commit and report. On success, commit as the plan's Handoff instructs, but SCOPE WHAT YOU STAGE. ` +
+      `Read the plan's "## Files this stage owns" section (STEP 1 surfaced only "Context to load" + preconditions, not this list — go read it now) and stage ONLY the files listed there. ` +
+      `Stage by explicit path; NEVER \`git add -A\` / \`git add .\`, which can sweep in unrelated or secret files and still pass the clean-tree gate. ` +
+      `Do NOT stage obvious-secret paths (\`.env*\`, \`*credentials*\`, \`*.key\`, \`*.pem\`) unless the ownership list explicitly names them. ` +
+      `If carrying out the plan genuinely forced you to change a file NOT in the ownership list, you must still COMMIT it — do NOT leave it uncommitted, because an unstaged change leaves the tree dirty and trips the next stage's clean-tree gate — but NAME that out-of-ownership file in your \`detail\` so review and verification can see the scope drift. The rule is "scope the commit and disclose the overflow," never "drop the overflow."\n\n` +
+      `Then return status "done" with the commit subject and your approximate token usage.`,
     { label: `stage-${n}`, phase: 'Implement', schema: STAGE_RESULT },
   )
 
@@ -487,12 +624,20 @@ for (let i = 0; i < stages.length; i++) {
   const ver = await verifyStage(file, n, res.commit)
   entry.verification = ver
 
-  if (!verificationPassed(ver)) {
+  const verStatus = gateOutcome(ver, n)
+  if (verStatus === 'fail') {
     log(`Halting at ${file}: independent verification failed — ${verificationSummary(ver)}`)
     return { halted: true, reason: 'verification-failed', atStage: file, atStageIndex: i + 1, results, baseRef }
   }
 
-  log(`Stage ${n} verified green on the committed state.`)
+  // Ownership axis (04), combined with — never folded into — the green gate above.
+  // A secret-shaped non-owned file halts; ordinary scope drift advances but is
+  // logged and surfaced in results[i].verification (ver.ownershipExtras).
+  if (ownershipOutcome(ver, n, file, 'stage commit') === 'halt') {
+    return { halted: true, reason: 'ownership-secret', atStage: file, atStageIndex: i + 1, results, baseRef }
+  }
+
+  if (verStatus === 'pass') log(`Stage ${n} verified green on the committed state.`)
 
   // --- Adversarial review (01): is it GOOD, not just green ------------------
   // Runs fully synchronously AFTER verification and BEFORE the next stage, so no
@@ -636,13 +781,22 @@ for (let i = 0; i < stages.length; i++) {
     if (anyFixed) {
       log(`Stage ${n}: minor finding(s) fixed (${entry.review.fixCommitMode}) — re-verifying through the green gate.`)
       const fixCommit = (fix && fix.commit) || res.commit
-      const rever = await verifyStage(file, n, fixCommit)
+      // Pass the fix's commit mode so the ownership check (04) scopes its
+      // --name-only to the right commit(s): an AMENDED stage commit is one commit
+      // at HEAD (stage + fix folded in); a FOLLOW-UP is two (the stage commit plus
+      // the fix), and checking only HEAD would drop the stage's own files and
+      // spuriously flag them. The green gate itself is unchanged.
+      const rever = await verifyStage(file, n, fixCommit, { fixCommitMode: entry.review.fixCommitMode })
       entry.reverification = rever
-      if (!verificationPassed(rever)) {
+      const reStatus = gateOutcome(rever, n)
+      if (reStatus === 'fail') {
         log(`Halting at ${file}: re-verification after the minor fix failed — ${verificationSummary(rever)}`)
         return { halted: true, reason: 'verification-failed', atStage: file, atStageIndex: i + 1, results, baseRef }
       }
-      log(`Stage ${n}: minor fix re-verified green — advancing.`)
+      if (ownershipOutcome(rever, n, file, 'minor-fix commit') === 'halt') {
+        return { halted: true, reason: 'ownership-secret', atStage: file, atStageIndex: i + 1, results, baseRef }
+      }
+      if (reStatus === 'pass') log(`Stage ${n}: minor fix re-verified green — advancing.`)
     } else {
       log(`Stage ${n}: all minor findings dropped as false positives — no fix, no second green gate. Advancing.`)
     }

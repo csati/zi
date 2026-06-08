@@ -113,10 +113,13 @@ baked into its design — keep them if you modify it:
   After a stage reports `done`, a *separate* `verifyStage()` agent re-runs that stage's exact
   acceptance commands (the per-FR selectors + build/test/lint the plan names) against the
   **committed** state, asserting a clean tree and the commit present and requiring exit code 0.
-  It is a **bash proxy, not a judge** — it reports raw facts; the pass/fail decision is mechanical
-  (`verificationPassed()`), never the agent's discretion. A failed gate halts the run
-  (`reason: "verification-failed"`). It runs strictly between stages, leaves the tree as it found
-  it, and is the single reusable gate that any review-driven fix (and any resume) re-enters.
+  It is a **bash proxy, not a judge** — it reports raw facts; the pass/warn/fail decision is
+  mechanical (`gateStatus()`), never the agent's discretion. A stage that *affirmatively* names no
+  runnable command (tests waived, no build/lint — the verifier sets `noRunnableCommands`) advances
+  as `warn` with a visible **unverified-by-test** flag rather than halting; an unexplained empty
+  check list stays `fail`. A failed gate halts the run (`reason: "verification-failed"`). It runs
+  strictly between stages, leaves the tree as it found it, and is the single reusable gate that any
+  review-driven fix (and any resume) re-enters.
 - **Adversarial review per stage.** After a stage is green, a *separate* reviewer (`reviewStage()`,
   never the implementer) reads only that stage's commit diff and asks whether it is **good**, not
   just green — correctness/security/edge-case/perf bugs and conformance to the surrounding code. The
