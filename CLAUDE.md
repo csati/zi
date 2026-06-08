@@ -119,7 +119,10 @@ baked into its design — keep them if you modify it:
   as `warn` with a visible **unverified-by-test** flag rather than halting; an unexplained empty
   check list stays `fail`. A failed gate halts the run (`reason: "verification-failed"`). It runs
   strictly between stages, leaves the tree as it found it, and is the single reusable gate that any
-  review-driven fix (and any resume) re-enters.
+  review-driven fix (and any resume) re-enters. One honest limit: this gate re-*runs* the stage's
+  test, it does not re-*author* it — a test that encodes the wrong expectation just re-passes — so
+  the test's *intent* is guarded separately by the anti-tautology mitigations in the review bullet
+  below (06).
 - **Adversarial review per stage.** After a stage is green, a *separate* reviewer (`reviewStage()`,
   never the implementer) reads only that stage's commit diff and asks whether it is **good**, not
   just green — correctness/security/edge-case/perf bugs and conformance to the surrounding code. The
@@ -136,6 +139,18 @@ baked into its design — keep them if you modify it:
   halt instead of being auto-refuted. The full suite still belongs only to the green gate
   (`verifyStage`): the confirmer's repro is one targeted run, not a suite re-run, and the post-fix
   re-verify runs only when a minor was actually fixed; a clean stage pays for no second gate.
+  The reviewer also carries an **anti-tautology charter** (06): the implementer authors *both* a
+  stage's code and the acceptance test for the FR it completes, so a self-confirming test could
+  carry a buggy implementation to green — execution (`verifyStage`) re-*runs* a test but never
+  re-*authors* it. Three execution-free mitigations guard this: `/pmf:decompose` pins each test's
+  assertions to the **PRD's concrete acceptance values** (not "assert it works", not a value
+  back-derived from the implementation's output); the reviewer flags the obvious self-confirming
+  test shapes (a static diff read with no PRD in scope — it catches obvious tautologies but cannot
+  *prove* a test encodes the right intent); and `finalize` flags any `test-coverable` "met" resting
+  on a tautological test (`FINALIZE_REPORT.intentFlag`). The executing cure — an always-on agent
+  authoring an *independent* assertion from PRD intent and halting on a mismatch (06, Step 4) — was
+  **considered and left unratified** (per-stage execution cost + false-halt risk in the one
+  unattended phase); only the three static mitigations ship.
 - **Resumable halts.** A halt returns and stops; `args.startAt` (a 1-based index or stage path)
   re-launches from a resolved stage — earlier stages are skipped as trusted-committed, the resolved
   stage is re-verified through the green gate (not re-implemented/re-reviewed), and later stages run

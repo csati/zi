@@ -46,8 +46,12 @@ The reviewer and the minor-fix agent are **static diff reads**; the **confirmer*
 substantiates a major may make **one bounded, finding-scoped reproduction attempt** before it can
 refute a runtime claim (restoring the tree afterward) — so a real runtime-only bug can actually
 halt rather than slip past a purely static read. The full suite still belongs only to the green
-gate. Every review finding is a claim until independently confirmed for **both reality and
-severity**: a confirmed **minor** is auto-fixed and re-verified through the same green gate; a
+gate. Because the implementer authors **both** a stage's code and its acceptance test, the pipeline
+also guards against a **self-confirming test** carrying a buggy implementation to green: `/pmf:decompose`
+pins each test's assertions to the PRD's concrete acceptance values, the reviewer flags obvious
+tautological tests (a static read — it can't *prove* intent), and `finalize` flags any `test-coverable`
+"met" that rests on such a test. Every review finding is a claim until independently confirmed for
+**both reality and severity**: a confirmed **minor** is auto-fixed and re-verified through the same green gate; a
 confirmed **major** halts the run for you to resolve. The run also halts the moment a stage reports a
 precondition conflict or its verification fails. A halt is **resumable** — once you resolve the
 stage (delegate or apply a fix, or waive with a reason), re-launch with `startAt` and the engine

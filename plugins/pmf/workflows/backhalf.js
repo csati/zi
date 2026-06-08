@@ -180,6 +180,15 @@ const FINALIZE_REPORT = {
           testCommand: { type: 'string', description: "For verifiedBy=test: the exact selector that was run (the FR's recorded acceptance command). Empty for inspection." },
           testResult: { type: 'string', enum: ['pass', 'fail', 'n/a'], description: 'Result of running testCommand; n/a when verifiedBy=inspection' },
           evidence: { type: 'string', description: 'For test: the selector output/summary. For inspection: file:line for met, the specific absence for missing.' },
+          intentFlag: {
+            type: 'boolean',
+            description:
+              "For verifiedBy=test FRs only (06, Step 3): TRUE when the recorded selector looks tautological/self-confirming — its assertions restate the implementation rather than the PRD's concrete acceptance values — so even a passing test does not actually prove the FR. A STATIC sanity-read of the test against the PRD's criteria, NOT proof the test is wrong; flag only the obvious cases. Omit/false for inspection FRs and for tests that plainly assert the PRD's stated behaviour.",
+          },
+          intentFlagReason: {
+            type: 'string',
+            description: 'When intentFlag is true, why the test looks self-confirming — what it asserts vs. what the PRD requires. Empty otherwise.',
+          },
         },
       },
     },
@@ -480,13 +489,26 @@ const findingsList = (findings) =>
 
 // The reviewer RAISES findings; it never confirms its own. It works off the
 // stage's commit DIFF, not the plan file — hence no stage-file path here.
+//
+// Anti-tautology charter (06, Step 2): the same agent that implements a stage also
+// AUTHORS the acceptance test for the FR it completes, so a test that asserts the
+// implementation rather than the FR's intent can carry a buggy implementation to
+// green — execution (verifyStage) re-runs that test but never re-authors it. The
+// reviewer therefore also flags the OBVIOUS self-confirming test shapes. RESIDUAL
+// LIMIT (kept honest, per 05): this is a static diff read with no PRD in scope, so
+// it catches only obvious tautologies — it cannot PROVE a test encodes the right
+// intent. The executing cure (06, Step 4 — an always-on agent that authors an
+// independent assertion from PRD intent and halts on a mismatch) was CONSIDERED and
+// left UNRATIFIED (per-stage execution cost + false-halt risk in the unattended
+// phase); Steps 1–3 are the shipped mitigation. See the docs.
 async function reviewStage(n, expectedCommit) {
   return await agent(
     `You are an INDEPENDENT ADVERSARIAL CODE REVIEWER for ONE stage of a decomposed feature, with a fresh context. ` +
       `You did NOT implement this stage, and you are NOT checking whether it works — it is already implemented, committed, and independently verified green. ` +
       `Your job is whether it is GOOD: real correctness/logic bugs, security issues, unhandled edge cases and error paths, resource/performance foot-guns, and places it violates the surrounding code's established patterns or the repo's lint/format configuration. Review the diff against the LIVE repo, not the plan.\n\n` +
       diffScope(expectedCommit) +
-      `\n\nYou only RAISE findings — you do NOT confirm, fix, edit, or commit anything; a separate step substantiates every finding before it counts. Each finding is a claim, not a verdict.\n\n` +
+      `\n\nANTI-TAUTOLOGY CHECK (test intent). When this stage's diff adds or changes a TEST, judge whether that test asserts the FR's INTENDED behaviour or merely RESTATES the implementation. The same agent authored BOTH the code and this test, so a self-confirming test lets a buggy implementation confirm itself and sail through every later gate (the green gate re-RUNS the test but never re-AUTHORS it). Raise a finding when a test looks tautological — its expected values appear lifted from what the code produces rather than from an external/spec acceptance value, it asserts on internal implementation details rather than observable behaviour, or it would still pass if the implementation were subtly wrong. Be honest about the limit of this check: you are a STATIC read with NO PRD in scope, so you can catch only the OBVIOUS self-confirming shapes — you cannot PROVE a test encodes the right intent. Flag the plain cases; do NOT manufacture findings for ordinary, reasonable tests.\n\n` +
+      `You only RAISE findings — you do NOT confirm, fix, edit, or commit anything; a separate step substantiates every finding before it counts. Each finding is a claim, not a verdict.\n\n` +
       `For each real issue, emit one finding: severity ("major" = a real correctness/security/data-loss/contract bug that should block shipping and needs human judgment; "minor" = a localized quality issue safely auto-fixable without judgment — style/conformance, a narrow missing guard, a small perf nit), plus category, file, line (file:line), claim (what's wrong and why it matters), and a concrete suggestedFix. ` +
       `Be precise and conservative: raise only what you can point to in the diff, and do NOT inflate severity — a confirmer re-checks every major and will refute over-statements. If the diff is clean, return an empty findings list and summary "clean".`,
     { label: `review-${n}`, phase: 'Review', schema: REVIEW_RESULT },
@@ -834,7 +856,7 @@ const report = await agent(
   `All decomposition stages are implemented and committed. Verify the WHOLE feature against its PRD \`${prd}\`, end to end.\n\n` +
     `The PRD classifies each FR as \`test-coverable\` or \`inspection-only\`. The stage files (${stageList || 'none passed'}) record, for each \`test-coverable\` FR, a **test selector** — the exact command that runs that FR's acceptance test — and may record a **test waiver**. Read the PRD for the classifications and the stage files for the selectors and any waiver.\n\n` +
     `For every FR, establish whether it is met and record HOW in the schema's per-FR fields:\n` +
-    `- \`test-coverable\` FR → set verifiedBy="test": RUN its recorded selector, set testCommand to that selector and testResult to pass/fail, and base met/partial/missing on the actual result (a selector that resolves to no test is "missing"). EXECUTE it — do not substitute reading the code.\n` +
+    `- \`test-coverable\` FR → set verifiedBy="test": RUN its recorded selector, set testCommand to that selector and testResult to pass/fail, and base met/partial/missing on the actual result (a selector that resolves to no test is "missing"). EXECUTE it — do not substitute reading the code. Additionally SANITY-CHECK the test's intent: read the selector's assertions and judge whether they assert the PRD's concrete acceptance values or merely RESTATE the implementation. If a "met" rests on a tautological/self-confirming test (expected values that look lifted from the implementation rather than the PRD), set intentFlag=true with intentFlagReason — a green such test does not actually prove the FR. This is a STATIC read of the test, not proof it is wrong: flag only the obvious cases, and never let a passing-but-tautological "met" pass silently.\n` +
     `- \`inspection-only\` FR, or any FR under a recorded waiver → set verifiedBy="inspection", testCommand empty, testResult="n/a": judge it by reading the code/artifact with file:line evidence. Use inspection ONLY for these — never to stand in for a selector that should have been run.\n\n` +
     `Check non-goals were respected and technical constraints honoured.\n\n` +
     `Then run the project's FULL build, test, and lint commands (discover them from AGENTS.md / CLAUDE.md) and capture the results.\n\n` +
