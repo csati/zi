@@ -111,7 +111,7 @@ const CONFIRM_RESULT = {
             type: 'string',
             enum: ['confirmed-major', 'downgraded-minor', 'refuted'],
             description:
-              'confirmed-major = independently reproduced AND ship-blocking (halts the run); downgraded-minor = real but not ship-blocking (flows to the fix path, does NOT halt); refuted = not a real problem (dropped). Default to refuted when you cannot concretely reproduce it.',
+              'confirmed-major = independently reproduced AND ship-blocking (halts the run); downgraded-minor = real but not ship-blocking (flows to the fix path, does NOT halt); refuted = not a real problem (dropped). For a runtime-class finding, "refuted" is valid ONLY after a genuine one-shot reproduction attempt that failed to reproduce it; a static misread may be refuted on inspection alone. A major must be substantiated either way, never assumed.',
           },
           reason: { type: 'string', description: 'Concrete evidence for the verdict — the code path / input that breaks it, or why it does not.' },
         },
@@ -440,18 +440,32 @@ function ownershipOutcome(ver, n, file, what) {
 }
 
 // --- Adversarial review agents (01) -----------------------------------------
-// All three read ONLY this stage's commit diff (`git show`/`git diff`), not the
-// whole repo, and NONE re-run the build/test/lint suite — that already passed
-// the green gate; review and confirmation are cheap diff-reading. Only the
-// post-fix re-verify (verifyStage) re-runs the suite, and only when a minor was
-// actually fixed.
+//
+// REVIEW EXECUTION POSTURE: B — static review + bounded confirmer execution
+// (ratified 2026-06-08, todo/05). All three agents read ONLY this stage's commit
+// diff (`git show`/`git diff`), not the whole repo. The reviewer and the minor-fix
+// agent are pure STATIC diff reads and never run anything. The CONFIRMER (majors
+// only) MAY make AT MOST ONE finding-scoped reproduction attempt before it is
+// allowed to refute a RUNTIME-CLASS major — converting "couldn't see it statically,
+// so refuted" into "tried to reproduce it and could not," so a real runtime-only
+// major can actually halt instead of being auto-waved through. The bound is ONE
+// attempt, expressed in the prompt only: the Workflow engine has no timeout
+// primitive for an agent's internal bash, so there is no enforced clock. The
+// confirmer restores the tree afterward (the verifier's STEP-4 discipline) so the
+// next stage still sees a clean tree. The FULL build/test/lint suite still belongs
+// ONLY to the green gate (verifyStage) — the confirmer's repro is one targeted run,
+// never a suite re-run; the post-fix re-verify (verifyStage) re-runs the suite, and
+// only when a minor was actually fixed. The mechanical halt is unchanged: a major
+// halts only when the confirmer returns `confirmed-major`.
 
-const diffScope = (expectedCommit) =>
+const diffScope = (expectedCommit, { allowRepro = false } = {}) =>
   `Scope yourself to THIS stage's commit diff — do NOT read or judge unrelated code. ` +
   `The stage reported commit "${expectedCommit || '(none reported)'}". ` +
   `Identify it (\`git log -1 --format='%h %s'\`, \`git log --oneline -5\` for context) and read its diff with \`git show <hash>\` (or \`git diff <hash>^ <hash>\`). ` +
   `You MAY open surrounding files for context — to judge conformance and spot broken assumptions — but review only what this diff changes. ` +
-  `Do NOT re-run the build/test/lint suite: it already passed an independent green gate, and this is a cheap diff read. Do NOT stage or push.`
+  (allowRepro
+    ? `Do NOT re-run the full build/test/lint suite as a blanket re-check — it already passed an independent green gate. (A single, finding-scoped reproduction is permitted under the BOUNDED REPRODUCTION instructions below; that narrow exception aside, treat this as a diff read.) Do NOT stage or push.`
+    : `Do NOT re-run the build/test/lint suite: it already passed an independent green gate, and this is a cheap diff read. Do NOT stage or push.`)
 
 // Render a finding list for a prompt, each line tagged with its stable ref so the
 // confirmer / fix agent can echo the ref back and we can match verdicts to findings.
@@ -480,14 +494,21 @@ async function reviewStage(n, expectedCommit) {
 }
 
 // The dedicated confirmer — a third perspective — substantiates each MAJOR.
+// Posture B (see the review-section header): it MAY make ONE finding-scoped
+// reproduction attempt per major before refuting a runtime-class finding.
 async function confirmMajors(n, expectedCommit, majors) {
   return await agent(
     `You are a DEDICATED FINDINGS CONFIRMER — a THIRD, independent perspective, distinct from BOTH the implementer and the reviewer — for ONE stage, with a fresh context. ` +
       `A reviewer raised the MAJOR findings below against this stage's commit diff. A confirmed major HALTS the unattended run, so for EACH finding you must independently reproduce-or-refute both that it is REAL and that "major" is the RIGHT severity, before the run is allowed to halt on it. Do NOT trust the reviewer's word.\n\n` +
-      diffScope(expectedCommit) +
-      `\n\nDo NOT edit, fix, or commit anything — you only return verdicts.\n\n` +
-      `For EACH finding (echo its ref) return one verdict: "confirmed-major" (you independently reproduced it AND it is a real, ship-blocking major — give the concrete code path / input that breaks it); "downgraded-minor" (real but NOT ship-blocking — a localized quality issue; say why it's minor); or "refuted" (not a real problem — say why, e.g. the guard exists elsewhere, the input can't occur, you misread). ` +
-      `Default to "refuted" when you cannot concretely reproduce it: a major halts the run, so it must be substantiated, not assumed.\n\n` +
+      diffScope(expectedCommit, { allowRepro: true }) +
+      `\n\nBOUNDED REPRODUCTION (majors only). Many real majors only manifest at runtime and are not obvious from reading the diff. For a finding whose claim is RUNTIME-CLASS — a wrong result, crash, data loss, broken contract, or unhandled error path; anything whose truth depends on EXECUTING the code rather than reading it — you MAY make AT MOST ONE minimal, finding-scoped reproduction attempt before you may refute it:\n` +
+      `  - Keep it NARROW: run only the specific failing test/selector, or construct one minimal repro (a tiny script / single command) that exercises exactly the claimed code path. This is NOT a licence to re-run the whole build/test/lint suite — that is the green gate's job and it already passed.\n` +
+      `  - To run anything you must know the project's build/test invocation: discover it from AGENTS.md / CLAUDE.md (the same place the finalize pass looks), or reuse the stage's own acceptance commands.\n` +
+      `  - The bound is ONE attempt, NOT a clock — there is no enforced time box. Make a single genuine attempt; do not loop or keep digging.\n` +
+      `  - RESTORE THE TREE afterward, exactly as the verifier does, so the next stage sees a clean tree: revert tracked changes with \`git checkout -- .\`, then remove only newly-appeared artifacts outside \`.pmf\` with \`git clean -fd -e .pmf\` (no \`-x\`, so gitignored caches stay). Do NOT stage, commit, or push.\n\n` +
+      `Apart from that one repro you do NOT edit, fix, or commit anything — you only return verdicts.\n\n` +
+      `For EACH finding (echo its ref) return one verdict: "confirmed-major" (real AND ship-blocking — give the concrete code path / input that breaks it, plus the repro result if you ran one); "downgraded-minor" (real but NOT ship-blocking — a localized quality issue; say why it's minor); or "refuted" (not a real problem — say why, e.g. the guard exists elsewhere, the input can't occur, you misread). ` +
+      `When you refute a RUNTIME-CLASS finding, your reason MUST cite the reproduction attempt you actually made and what it showed (e.g. "ran <cmd>, it passed" / "the path is unreachable because…") — "couldn't see it in the diff" is NOT a sufficient refutation for a runtime claim. A finding you can refute on PURE STATIC inspection — a misread, a guard plainly present in the diff, an input that provably cannot occur — needs no repro: refute it and say why. A major halts the run, so it must be substantiated either way, never assumed.\n\n` +
       `Findings to confirm:\n${findingsList(majors)}`,
     { label: `confirm-${n}`, phase: 'Review', schema: CONFIRM_RESULT },
   )

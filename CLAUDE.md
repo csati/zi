@@ -129,8 +129,13 @@ baked into its design — keep them if you modify it:
   is confirmed-and-fixed by a fix agent (`fixMinors()`) and re-enters the green gate (the re-verify is
   the green gate only, never a second review); a reviewer-`major` is substantiated by a dedicated
   confirmer (`confirmMajors()`, a third perspective) and, only if confirmed, **halts**
-  (`reason: "review-major"`). Reviewer/confirmer never re-run the suite — only the post-fix re-verify
-  does, and only when a minor was actually fixed; a clean stage pays for no second gate.
+  (`reason: "review-major"`). **Review execution posture is B** (recorded at the review-section
+  header in `backhalf.js`): the reviewer and `fixMinors` are static diff reads that never run
+  anything, but the confirmer MAY make **at most one** finding-scoped reproduction attempt before
+  refuting a runtime-class major — restoring the tree afterward — so a real runtime-only major can
+  halt instead of being auto-refuted. The full suite still belongs only to the green gate
+  (`verifyStage`): the confirmer's repro is one targeted run, not a suite re-run, and the post-fix
+  re-verify runs only when a minor was actually fixed; a clean stage pays for no second gate.
 - **Resumable halts.** A halt returns and stops; `args.startAt` (a 1-based index or stage path)
   re-launches from a resolved stage — earlier stages are skipped as trusted-committed, the resolved
   stage is re-verified through the green gate (not re-implemented/re-reviewed), and later stages run

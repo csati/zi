@@ -42,9 +42,13 @@ time, in order**. After each stage a **separate verifier agent** independently r
 stage's acceptance commands against the committed state — so no stage advances on the
 implementer's word alone — and then a **third agent adversarially reviews** the stage's commit
 diff for quality (correctness, security, edge cases, perf, conformance), not just completeness.
-Every review finding is a claim until independently confirmed for **both reality and severity**:
-a confirmed **minor** is auto-fixed and re-verified through the same green gate; a confirmed
-**major** halts the run for you to resolve. The run also halts the moment a stage reports a
+The reviewer and the minor-fix agent are **static diff reads**; the **confirmer** that
+substantiates a major may make **one bounded, finding-scoped reproduction attempt** before it can
+refute a runtime claim (restoring the tree afterward) — so a real runtime-only bug can actually
+halt rather than slip past a purely static read. The full suite still belongs only to the green
+gate. Every review finding is a claim until independently confirmed for **both reality and
+severity**: a confirmed **minor** is auto-fixed and re-verified through the same green gate; a
+confirmed **major** halts the run for you to resolve. The run also halts the moment a stage reports a
 precondition conflict or its verification fails. A halt is **resumable** — once you resolve the
 stage (delegate or apply a fix, or waive with a reason), re-launch with `startAt` and the engine
 skips the already-committed stages. A final finalize pass then verifies the whole feature against
