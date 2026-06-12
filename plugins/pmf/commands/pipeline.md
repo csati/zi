@@ -1,7 +1,7 @@
 ---
 description: Conductor for the prompt→research→prd→decompose→implement→finalize pipeline. Inspects the artifacts in .pmf/, reports where you are, and tells you the exact next command and when to clear context. Guides only — it does not run the phases.
 argument-hint: [optional {desc} slug, or part of it, to pick which feature's pipeline to track; defaults to the only/most-recent task directory in .pmf/]
-allowed-tools: Bash(date:*), Bash(git:*), Bash(ls:*), Read, Grep, Glob, AskUserQuestion
+allowed-tools: Bash(date:*), Bash(git:*), Bash(grep:*), Bash(ls:*), Read, Grep, Glob, AskUserQuestion
 ---
 
 # Pipeline conductor
@@ -47,22 +47,37 @@ For the chosen task directory, glob which artifacts exist inside it:
 - `.pmf/{slug}/plan-stage-*.md` → phase 6 done (note how many stages)
 - `.pmf/{slug}/finalize.md` → phase 8 has been run at least once
 
-The **review** phases (3, 5, 7) leave no reliable marker — `/pmf:doublecheck` writes inline `> **[doublecheck …]**` notes only when something changed, and nothing when the artifact was already clean. So you cannot prove a review happened from the files. Grep the relevant artifact for `[doublecheck` as a hint, and if it's ambiguous whether the user has reviewed the latest produced artifact, **ask** rather than assume.
+The **review** phases (3, 5, 7) record a **completion receipt** — `/pmf:doublecheck` writes a `<!-- pmf:reviewed date=… hash=… … -->` line as the first line of each reviewed artifact, even when it found nothing. Read the receipt to determine review state; do **not** grep for change-notes (a clean review leaves none).
+
+For each review phase, take its artifact(s) — phase 3 → `brief.md`, phase 5 → `prd.md`, phase 7 → every `plan-stage-*.md` — and for each file:
+
+- **No receipt line** → the review is unconfirmed (`~`).
+- **Receipt present** → recompute the canonical hash and compare it to the receipt's `hash` (the **identical** command `/pmf:doublecheck` used, so a match is exact):
+
+  ```
+  grep -v '^<!-- pmf:reviewed ' <file> | git hash-object --stdin
+  ```
+
+  - **matches** → fresh review (`✓`); surface the receipt's `date` and `result`.
+  - **differs** → the artifact changed since it was reviewed: reviewed-but-**stale** (`✓ (stale — artifact changed since review)`), never a clean `✓`.
+
+For the decomposition (phase 7), aggregate across all `plan-stage-*.md`: **any** stage missing a receipt → `~`; all stages stamped but **any** hash stale → `✓ (stale)`; all present and all matching → `✓`.
 
 ### 3 — Report and point to the next step
 
 Print a compact checklist of the eight phases with a status each:
 
-- `✓` artifact present / phase done
-- `~` review phase — recommended, completion unverifiable (note if `[doublecheck]` marks were found)
+- `✓` produce-phase artifact present / review phase with a present, hash-matching receipt (show its `date` + `result`)
+- `✓ (stale — artifact changed since review)` review phase whose receipt no longer matches the artifact
+- `~` review phase with no receipt — freshness can't be confirmed; run the review to stamp one
 - `▢` not started
 
-Then give a single **Next:** line — the earliest incomplete phase — as the exact command to run, prefixed with **“clear context, then …”**. If the next produce-phase is preceded by an un-confirmed review phase, mention the review first as recommended-but-skippable.
+Then give a single **Next:** line — the earliest incomplete phase — as the exact command to run, prefixed with **“clear context, then …”**. If the next produce-phase is preceded by a review phase whose receipt is **absent or stale**, mention that review first as recommended-but-skippable (a stale receipt means the artifact changed since it was last reviewed).
 
 When phases 1–7 are complete (PRD exists, decomposed, and the decomposition has been reviewed), the next step is the automated back half: tell the user to run **`/pmf:implement-all .pmf/{slug}/prd.md`**, which implements every stage with a fresh agent in order and then finalizes against the PRD.
 
 ## Guardrails
 
 - **Guide, don't execute.** Never run a phase, edit an artifact, or touch source from this command.
-- **Don't fabricate review state.** If you can't tell whether a review happened, say so or ask — don't report `✓` for a review you can't verify.
+- **Don't fabricate review state.** Report review phases from the receipt, never a guess: a clean `✓` requires a present, hash-matching receipt. Never emit a clean `✓` when freshness can't be confirmed — absent receipt → `~`, stale receipt → `✓ (stale)`.
 - **Always pair the next command with the clear-context reminder.** That reminder is the point of the conductor.

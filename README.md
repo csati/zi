@@ -108,9 +108,11 @@ the plugin is path-portable — it works wherever it's installed, on any machine
 
 ## Caveats
 
-- **Review state isn't auto-detectable.** `/pmf:doublecheck` leaves inline `[doublecheck]`
-  notes only when it changes something, so the conductor can't *prove* a review happened;
-  it greps for those notes as a hint and asks when unsure.
+- **Reviews stay skippable, but are now detectable.** `/pmf:doublecheck` stamps an
+  unconditional `<!-- pmf:reviewed … hash=… -->` receipt on each reviewed artifact (even a
+  clean review), so the conductor can *prove* a review happened and tell fresh from stale by
+  re-hashing the content. It still only *detects and warns* — it never forces a review or
+  auto-re-reviews a stale one — and the receipt's flaw counts are self-reported, not audited.
 - **`finalize` reports, it doesn't fix.** The back-half's finalize pass returns a per-FR
   met/partial/missing gap report; deciding how to close a gap stays with you.
 - **`stage` and `commit`** are general-purpose git helpers bundled alongside the pipeline

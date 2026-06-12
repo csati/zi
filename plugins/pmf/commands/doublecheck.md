@@ -1,7 +1,7 @@
 ---
 description: Verify a /pmf:research brief, a /pmf:prd PRD, or a /pmf:decompose plan set for correctness and completeness against the source it is based on. Interrogate each flaw one at a time with a recommended fix and a keep-as-is option, then edit the file(s) with the chosen resolutions and inline notes. Use when the user wants to double-check, validate, or sanity-check a brief, PRD, or decomposition before acting on it.
 argument-hint: [path to the brief.md, prd.md, a plan-stage-*.md, or the task directory to verify]
-allowed-tools: Bash(date:*), Read, Grep, Glob, AskUserQuestion, Edit
+allowed-tools: Bash(date:*), Bash(git:*), Bash(grep:*), Read, Grep, Glob, AskUserQuestion, Edit
 ---
 
 # Double-Check
@@ -92,9 +92,37 @@ Place the note as a markdown blockquote immediately adjacent to the affected con
 - Fixed: `> **[doublecheck {date}]** Revised per review — {what changed and why}.`
 - Kept as-is: `> **[doublecheck {date}]** Reviewed, kept as-is per user — {flaw}; {rationale}.`
 
+### Phase 3 — Stamp the review receipt (always)
+
+Whether or not you found a single flaw, record a **completion receipt** on each reviewed file, so the conductor (`/pmf:pipeline`) can prove the review happened and against which version. This is the one write you make even on a perfectly clean review.
+
+The receipt is a single HTML-comment line written as the **first line** of the file:
+
+`<!-- pmf:reviewed date=YYYY-MM-DD hash=<canonical-hash> flaws=N fixed=M kept=K result=clean|edited -->`
+
+- `date` — the review date (the `date +%Y-%m-%d` already captured above).
+- `hash` — the canonical content hash that binds the receipt to the version reviewed (see below). **Not optional**: without it the conductor cannot tell a fresh review from a stale one.
+- `flaws=N fixed=M kept=K` — counts for *this file*: flaws raised that affected it, of which fixed vs kept-as-is (N = M + K). Self-reported and advisory — a record, not an audited tally.
+- `result` — `clean` if you added no inline notes to this file (nothing affected it), `edited` if you wrote any fix or kept-as-is note to it.
+
+**Compute the canonical hash** — the content with any existing receipt line excluded, so the hash is stable across re-runs and never folds in the receipt itself. Run this *after* all Phase 2 body edits are applied:
+
+```
+grep -v '^<!-- pmf:reviewed ' <file> | git hash-object --stdin
+```
+
+(`git hash-object` works on uncommitted `.pmf/` files; `--stdin` hashes the receipt-stripped content. The conductor recomputes the **identical** command to compare, so the two hashes agree by construction.)
+
+**Write it idempotently** — one receipt per file, latest review wins:
+
+- If the file already has a `<!-- pmf:reviewed … -->` line, **replace it in place** with the new one — never append a second.
+- If it has none, insert the receipt as the new first line.
+
+**For a decomposition**, stamp **every** `plan-stage-*.md` in the set with its **own** receipt — its own canonical hash and its own counts — never a single PRD-level stamp. Per-file receipts give per-file staleness, so the conductor can tell exactly which stage drifted.
+
 ## Output
 
-You edit the reviewed file(s) **in place** — you do not create new files. For a decomposition, a single fix may touch more than one stage file (e.g. moving a requirement from one stage to another); edit each affected file and record the note in that file. When the interrogation is complete, give the user a short summary: how many flaws were raised, how many were fixed vs kept as-is, and the path(s) of the file(s) you edited.
+You edit the reviewed file(s) **in place** — you do not create new files. For a decomposition, a single fix may touch more than one stage file (e.g. moving a requirement from one stage to another); edit each affected file and record the note in that file. Every reviewed file also carries its completion receipt (Phase 3), written or replaced whether or not anything else changed. When the interrogation is complete, give the user a short summary: how many flaws were raised, how many were fixed vs kept as-is, the path(s) of the file(s) you edited, and confirmation that each reviewed file's receipt was stamped.
 
 ## Guardrails
 
@@ -102,4 +130,4 @@ You edit the reviewed file(s) **in place** — you do not create new files. For 
 - **Interrogation, not a report** — one flaw at a time, each resolved before the next. No upfront list.
 - **Never change the document silently** — every edit, whether a fix or a confirmed as-is, carries an inline note recording the user's choice.
 - **Resolve, don't assume** — if a fix has more than one reasonable form, ask; don't pick one and bake it in.
-- **If you find no flaws**, say so plainly and leave the file untouched (no notes).
+- **If you find no flaws**, say so plainly and add **no inline notes** to the body — but still write the completion receipt (Phase 3). The receipt is the only write a clean review makes.
