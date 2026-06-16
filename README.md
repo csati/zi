@@ -1,62 +1,52 @@
-# pmf — spec-driven development pipeline
+# pmf — prompt-to-plan planning helper
 
-A Claude Code plugin that turns a rough idea into shipped code through a chain of
+A Claude Code plugin that turns a rough idea into a verified implementation plan through two
 context-cleared phases, each producing a reviewable artifact that feeds the next:
 
 ```
-prompt → research → (review) → prd → (review) → decompose → (review) → implement → finalize
+prompt → plan → (you implement)
 ```
 
 Every artifact for one feature lives together in a per-task directory `.pmf/{ts}-{desc}/`
-in your working directory — the directory name is the feature's slug — so the phases find
-each other automatically (`prompt.md` → `brief.md` → `prd.md` → `plan-stage-NN.md`).
+in your working directory — the directory name is the feature's slug — so the second phase
+finds the first automatically (`prompt.md` → `plan.md`).
 
-## The phases
+## The commands
 
-| # | Phase | Command | Produces |
-|---|-------|---------|----------|
-| 1 | Prompt | `/pmf:prompt <desc>` | `.pmf/{slug}/prompt.md` |
-| 2 | Research | `/pmf:research .pmf/{slug}/prompt.md` | `.pmf/{slug}/brief.md` |
-| 3 | Review brief | `/pmf:doublecheck .pmf/{slug}/brief.md` | edits brief in place |
-| 4 | PRD | `/pmf:prd .pmf/{slug}/brief.md` | `.pmf/{slug}/prd.md` |
-| 5 | Review PRD | `/pmf:doublecheck .pmf/{slug}/prd.md` | edits PRD in place |
-| 6 | Decompose | `/pmf:decompose .pmf/{slug}/prd.md` | `.pmf/{slug}/plan-stage-NN.md` |
-| 7 | Review decomposition | `/pmf:doublecheck .pmf/{slug}/plan-stage-01.md` | edits stage files in place |
-| 8 | Implement + finalize | `/pmf:implement-all .pmf/{slug}/prd.md` | committed code + gap report |
+The plugin ships four slash commands — two planning phases plus two git helpers:
 
-**Clear context between phases.** Each phase's quality comes from a clean context that
-sees only the prior artifact. Phases 1–7 are interactive — you run them. Phase 8 is the
-automated back half.
+| Command | Reads | Produces | Role |
+|---------|-------|----------|------|
+| `/pmf:prompt <desc>` | a rough idea | `.pmf/{slug}/prompt.md` | interrogate intent, surface flaws, save a refined prompt |
+| `/pmf:plan <prompt>` | `.pmf/{slug}/prompt.md` or inline text | `.pmf/{slug}/plan.md` | draft a plan, independently verify it, persist on approval |
+| `/pmf:stage <desc>` | your description | staged files | stage files for commit from a natural-language description |
+| `/pmf:commit` | staged changes | a commit | commit staged changes with a terse single-line message |
 
-### `/pmf:pipeline` — the conductor
+**Clear context between phases.** Each phase's quality comes from a clean context that sees
+only the prior artifact. Both planning phases are interactive — you run them, answer their
+questions, and approve their output. After `plan` writes `plan.md`, **you implement the code
+yourself** — the plugin stops at the verified plan; there is no automated, self-committing
+back-half.
 
-Lost? Run `/pmf:pipeline` in your working directory. It inspects which artifacts exist
-for the active slug, shows a phase checklist, and tells you the exact next command and
-when to clear context. It only guides — it never runs a phase or edits anything.
+### `/pmf:prompt` — refine the idea
 
-### `/pmf:implement-all` — the automated back half
+Interrogates a rough idea until intent is crystal clear: it grounds itself in your codebase
+with read-only exploration, asks only the questions the code can't answer, and explicitly
+surfaces ambiguities, flaws, side effects, and hidden assumptions for you to resolve. Only once
+intent is confirmed and every raised risk is settled does it write a tight, self-contained
+spec to `.pmf/{slug}/prompt.md` — the single input the next phase reads from a fresh context.
 
-Once phases 1–7 are done, `/pmf:implement-all .pmf/{slug}/prd.md` launches the `backhalf.js`
-workflow: it implements each `.pmf/{slug}/plan-stage-NN.md` with a **fresh agent, one at a
-time, in order**. After each stage a **separate verifier agent** independently re-runs that
-stage's acceptance commands against the committed state — so no stage advances on the
-implementer's word alone — and then a **third agent adversarially reviews** the stage's commit
-diff for quality (correctness, security, edge cases, perf, conformance), not just completeness.
-The reviewer and the minor-fix agent are **static diff reads**; the **confirmer** that
-substantiates a major may make **one bounded, finding-scoped reproduction attempt** before it can
-refute a runtime claim (restoring the tree afterward) — so a real runtime-only bug can actually
-halt rather than slip past a purely static read. The full suite still belongs only to the green
-gate. Because the implementer authors **both** a stage's code and its acceptance test, the pipeline
-also guards against a **self-confirming test** carrying a buggy implementation to green: `/pmf:decompose`
-pins each test's assertions to the PRD's concrete acceptance values, the reviewer flags obvious
-tautological tests (a static read — it can't *prove* intent), and `finalize` flags any `test-coverable`
-"met" that rests on such a test. Every review finding is a claim until independently confirmed for
-**both reality and severity**: a confirmed **minor** is auto-fixed and re-verified through the same green gate; a
-confirmed **major** halts the run for you to resolve. The run also halts the moment a stage reports a
-precondition conflict or its verification fails. A halt is **resumable** — once you resolve the
-stage (delegate or apply a fix, or waive with a reason), re-launch with `startAt` and the engine
-skips the already-committed stages. A final finalize pass then verifies the whole feature against
-the PRD and reports gaps.
+### `/pmf:plan` — draft and verify the plan
+
+Takes a prompt — a `.pmf/{slug}/prompt.md` file, a task-directory reference, or inline text —
+and drafts a concrete implementation plan in plan mode, grounded in the real files, modules,
+and build/test/lint commands of your repo. It then launches a **fresh, independent subagent**
+that never sees the planning conversation to verify the plan against both the prompt and the
+codebase — checking prompt fidelity, internal consistency, groundedness, feasibility, ordering,
+and verifiability — and returns a structured findings list. You work those findings **one at a
+time**, deciding each resolution, and the plan is updated as you go. Only after you approve does
+it persist the verified plan to `.pmf/{slug}/plan.md` — paired as a sibling of its source
+prompt — and stop. Implementing the plan is a separate step you initiate.
 
 ## Install
 
@@ -95,25 +85,19 @@ pmf/                                   ← repo root = the "ncs-plugins" marketp
 ├── .claude-plugin/marketplace.json    ← the catalog (lists the pmf plugin)
 ├── plugins/pmf/                       ← the plugin itself
 │   ├── .claude-plugin/plugin.json
-│   ├── commands/   prompt, research, prd, decompose, doublecheck, finalize,
-│   │               pipeline, implement-all, stage, commit
-│   └── workflows/backhalf.js          ← the sequential implement→verify→review→finalize engine
+│   └── commands/   prompt, plan, stage, commit
 ├── README.md
 ├── CLAUDE.md
 └── LICENSE
 ```
 
-`implement-all` references the engine as `${CLAUDE_PLUGIN_ROOT}/workflows/backhalf.js`, so
-the plugin is path-portable — it works wherever it's installed, on any machine.
+After install, commands are namespaced **`/pmf:<command>`** (e.g. `/pmf:prompt`).
 
 ## Caveats
 
-- **Reviews stay skippable, but are now detectable.** `/pmf:doublecheck` stamps an
-  unconditional `<!-- pmf:reviewed … hash=… -->` receipt on each reviewed artifact (even a
-  clean review), so the conductor can *prove* a review happened and tell fresh from stale by
-  re-hashing the content. It still only *detects and warns* — it never forces a review or
-  auto-re-reviews a stale one — and the receipt's flaw counts are self-reported, not audited.
-- **`finalize` reports, it doesn't fix.** The back-half's finalize pass returns a per-FR
-  met/partial/missing gap report; deciding how to close a gap stays with you.
-- **`stage` and `commit`** are general-purpose git helpers bundled alongside the pipeline
-  commands — handy, but not part of the spec-driven flow itself.
+- **Plan, don't implement.** `/pmf:plan` stops at a verified, approved `plan.md`; writing and
+  committing the code is a separate step you drive yourself.
+- **Independence is the point.** `/pmf:plan`'s verification runs in a fresh subagent with no
+  view of the planning conversation — it reports findings, it never silently rewrites the plan.
+- **`stage` and `commit`** are general-purpose git helpers bundled alongside the planning
+  commands — handy, but not part of the `prompt → plan` flow itself.

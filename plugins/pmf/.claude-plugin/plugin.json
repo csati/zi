@@ -1,11 +1,11 @@
 {
   "name": "pmf",
-  "displayName": "PMF Pipeline",
-  "description": "Spec-driven development pipeline: prompt → research → prd → decompose → review → implement → finalize, with context-clearing gates and an automated implementation back-half.",
+  "displayName": "PMF — Prompt to Plan",
+  "description": "Turn a rough idea into a refined prompt and a verified implementation plan through context-cleared phases (prompt → plan), with an independent subagent verifying the plan, plus git stage and commit helpers.",
   "version": "1.0.0",
   "license": "MIT",
   "author": {
     "name": "Norbert Csatari"
   },
-  "keywords": ["workflow", "pipeline", "prd", "spec-driven", "planning"]
+  "keywords": ["planning", "prompt", "plan", "spec-driven", "git"]
 }

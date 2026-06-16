@@ -8,7 +8,7 @@
     {
       "name": "pmf",
       "source": "./plugins/pmf",
-      "description": "Spec-driven development pipeline: prompt → research → prd → decompose → review → implement → finalize."
+      "description": "Prompt-to-plan helper: interrogate a rough idea into a refined prompt, then draft and independently verify an implementation plan (prompt → plan). Plus git stage and commit helpers."
     }
   ]
 }
