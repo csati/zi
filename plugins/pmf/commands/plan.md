@@ -90,12 +90,17 @@ what the codebase actually shows), and a *recommended fix*. Check for:
 - **Prompt fidelity (both directions)** — every requirement, constraint, and success criterion
   in the prompt is addressed by the plan; and the plan invents no scope the prompt never asked
   for.
+- **Internal consistency** — no section of the plan contradicts another: a step that fights an
+  earlier step, an acceptance criterion that contradicts the chosen approach, or an interface
+  two steps describe differently.
 - **Groundedness** — every referenced path, symbol, API, and command actually exists and
   matches the codebase; nothing stale or hallucinated.
 - **Feasibility & ordering** — the approach is workable, the steps are correctly ordered, and
   nothing depends on something not yet established.
 - **Verifiability** — acceptance criteria are concrete and checkable, not vague ("should be
   fast").
+- **Structural substance** — every part of the plan (approach, steps, files to touch,
+  acceptance criteria) is present and concrete, not a placeholder, "TBD", or hand-wave.
 
 The subagent **only reports** — it must not edit the plan, the prompt, or any source.
 
