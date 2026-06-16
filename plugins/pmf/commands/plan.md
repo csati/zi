@@ -1,5 +1,5 @@
 ---
-description: Turn a prompt (inline or a prompt file) into a verified implementation plan — draft it in plan mode, have a fresh subagent independently verify it against the prompt and the codebase, interrogate the findings with the user one at a time, update the plan, and on approval persist it to .pmf/{slug}/plan.md. Use for a single quick plan rather than the full prompt→research→prd→decompose pipeline.
+description: Turn a prompt (inline or a prompt file) into a verified implementation plan — explore and draft in plan mode, have a fresh subagent independently verify it against the prompt and the codebase, interrogate the findings with the user one at a time, update the plan, and on approval persist it to .pmf/{slug}/plan.md. Use for a single quick plan rather than the full prompt→research→prd→decompose pipeline.
 argument-hint: [prompt file path / task-directory reference, or the problem statement text itself]
 allowed-tools: Bash(date:*), Read, Grep, Glob, Task, AskUserQuestion, EnterPlanMode, ExitPlanMode, Write, Edit
 ---
@@ -53,6 +53,10 @@ Resolution rules:
 4. If the argument is empty, ask the user what they want planned before continuing. Do not
    invent a topic.
 
+**Resolution may only read the prompt.** The single Read permitted here is of the prompt
+file the argument resolves to (rule 1 or 2). Do **not** Read/Grep/Glob the codebase during
+resolution — all codebase exploration happens *inside* plan mode in Phase 1, never before it.
+
 **Remember where the prompt came from.** If it resolved to a file **inside an existing
 `.pmf/{slug}/` directory**, note that — it decides where the plan is persisted in Phase 4.
 Then confirm the resolved prompt back to the user (and the resolved file path, if any) so they
@@ -62,7 +66,11 @@ have explicit feedback on exactly what this command is about to plan.
 
 ### Phase 1 — Draft the plan in plan mode
 
-1. Call `EnterPlanMode` (this asks the user to consent to plan mode).
+1. Call `EnterPlanMode` **first — before any codebase exploration** (this asks the user to
+   consent to plan mode). This MUST be the first action after the prompt is resolved: do **not**
+   Read/Grep/Glob the codebase before this call. Entering plan mode up front makes the entire
+   explore-and-draft phase read-only, so the `Edit`/`Write` tools this command holds cannot
+   mutate real source while drafting.
 2. **Ground in the codebase** with Read/Grep/Glob: find the real files, modules, and patterns
    the plan will touch, and the project's actual build / test / lint commands (from its
    `AGENTS.md` / `CLAUDE.md`).
@@ -144,6 +152,8 @@ nothing, say so plainly and proceed.
 
 ## Guardrails
 
+- **Plan mode first.** `EnterPlanMode` is the first action after the prompt is resolved; no
+  codebase Read/Grep/Glob happens before it. Resolution itself only reads the prompt file.
 - **Never persist early.** The `.pmf/{slug}/plan.md` artifact is written only after the Phase 4
   approval gate — never "just in case."
 - **Independence is mandatory.** The verifier is a fresh subagent with no view of this
