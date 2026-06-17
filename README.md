@@ -13,12 +13,13 @@ finds the first automatically (`prompt.md` → `plan.md`).
 
 ## The commands
 
-The plugin ships four slash commands — two planning phases plus two git helpers:
+The plugin ships five slash commands — two planning phases, two git helpers, and a standalone overnight-loop generator:
 
 | Command | Reads | Produces | Role |
 |---------|-------|----------|------|
 | `/pmf:prompt <desc>` | a rough idea | `.pmf/{slug}/prompt.md` | interrogate intent, surface flaws, save a refined prompt |
 | `/pmf:plan <prompt>` | `.pmf/{slug}/prompt.md` or inline text | `.pmf/{slug}/plan.md` | draft a plan, independently verify it, persist on approval |
+| `/pmf:overnight <goal>` | a loop GOAL | `.pmf/{slug}/overnight.md` | interrogate the goal, generate an unattended never-halt loop-orchestration prompt |
 | `/pmf:stage <desc>` | your description | staged files | stage files for commit from a natural-language description |
 | `/pmf:commit` | staged changes | a commit | commit staged changes with a terse single-line message |
 
@@ -47,6 +48,15 @@ and verifiability — and returns a structured findings list. You work those fin
 time**, deciding each resolution, and the plan is updated as you go. Only after you approve does
 it persist the verified plan to `.pmf/{slug}/plan.md` — paired as a sibling of its source
 prompt — and stop. Implementing the plan is a separate step you initiate.
+
+### `/pmf:overnight` — generate an overnight loop prompt
+
+Interrogates a loop GOAL with the same produce-phase discipline — grounds in your repo to detect
+its stack, asks only what the code can't answer, recommends a verification gate, and surfaces the
+autonomy risks of an unattended run — then writes a self-contained, generalized
+loop-orchestration prompt to `.pmf/{slug}/overnight.md`. It produces a **prompt only** and never
+runs the loop; the output is deliberately named `overnight.md` (not `prompt.md`) so `/pmf:plan`
+won't treat it as a plannable pipeline prompt.
 
 ## Install
 
@@ -85,7 +95,7 @@ pmf/                                   ← repo root = the "ncs-plugins" marketp
 ├── .claude-plugin/marketplace.json    ← the catalog (lists the pmf plugin)
 ├── plugins/pmf/                       ← the plugin itself
 │   ├── .claude-plugin/plugin.json
-│   └── commands/   prompt, plan, stage, commit
+│   └── commands/   prompt, plan, overnight, stage, commit
 ├── README.md
 ├── CLAUDE.md
 └── LICENSE

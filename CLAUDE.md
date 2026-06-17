@@ -65,6 +65,17 @@ an artifact out of its task directory breaks how the next phase locates its inpu
 | `/pmf:prompt` | a rough idea | `{slug}/prompt.md` | interrogate intent, surface flaws/side effects, save refined prompt |
 | `/pmf:plan` | `{slug}/prompt.md`, a task-dir reference, or inline text | `{slug}/plan.md` | draft a plan, independently verify it, persist on approval |
 
+`/pmf:overnight` is a **standalone produce command**: it follows the same produce-phase
+interrogation discipline (ground → interrogate → surface-risks → write-on-gate) but is **not** a
+step of the `prompt → plan` pipeline. It interrogates a loop GOAL and generates an unattended,
+never-halt loop-orchestration prompt, written to `{slug}/overnight.md` — a **distinct filename**
+(NOT `prompt.md`) chosen precisely so `/pmf:plan` never consumes it as a plannable pipeline
+prompt. It writes the prompt only and never launches the loop.
+
+| Command | Reads | Writes | Role |
+|---|---|---|---|
+| `/pmf:overnight` | a loop GOAL | `{slug}/overnight.md` | interrogate the goal, generate an unattended never-halt loop-orchestration prompt (never runs the loop) |
+
 `stage` and `commit` are general-purpose git helpers bundled with the plugin — handy, but not
 phases of the `prompt → plan` flow:
 
