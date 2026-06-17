@@ -33,7 +33,8 @@ the marketplace is added over git or a local path — not via a bare URL to `mar
 
 After install, commands are namespaced **`/pmf:<command>`** (e.g. `/pmf:prompt`). Command
 `.md` edits apply live; if you change `marketplace.json` or `plugin.json`, run
-`/plugin marketplace update`.
+`/plugin marketplace update`. When shipping a change colleagues will pull, bump `version` in
+`plugins/pmf/.claude-plugin/plugin.json` (currently `1.0.0`) so installs pick it up.
 
 ## The core architecture: a directory-per-task, context-cleared flow
 
@@ -65,6 +66,11 @@ an artifact out of its task directory breaks how the next phase locates its inpu
 | `/pmf:prompt` | a rough idea | `{slug}/prompt.md` | interrogate intent, surface flaws/side effects, save refined prompt |
 | `/pmf:plan` | `{slug}/prompt.md`, a task-dir reference, or inline text | `{slug}/plan.md` | draft a plan, independently verify it, persist on approval |
 
+Note: `plan.md`'s frontmatter `description` contrasts itself with a fuller
+`prompt→research→prd→decompose` pipeline. That larger pipeline is **aspirational/comparative
+wording** — only `prompt → plan` ships in this repo, so don't go hunting for `research`, `prd`,
+or `decompose` commands.
+
 `/pmf:overnight` is a **standalone produce command**: it follows the same produce-phase
 interrogation discipline (ground → interrogate → surface-risks → write-on-gate) but is **not** a
 step of the `prompt → plan` pipeline. It interrogates a loop GOAL and generates an unattended,
@@ -83,7 +89,7 @@ phases of the `prompt → plan` flow:
 |---|---|
 | `/pmf:stage` | stage files for commit from a natural-language description (never commits) |
 | `/pmf:commit` | commit already-staged changes with a terse single-line message (never stages) |
-| `/pmf:locate` | locate code from a natural-language description (or recall a saved label); read-only except for saving references under `~/.claude/locate-refs/` |
+| `/pmf:locate` | locate code from a natural-language description (or recall a saved label); read-only except for saving references under `~/.claude/locate-refs/<project>/<label>.md` (`<project>` = `basename "$PWD"`, so refs are scoped per project; collisions suffix `-2`, `-3`, never overwrite) |
 
 ## How commands are written (conventions to match when editing)
 
@@ -100,7 +106,9 @@ Each `plugins/pmf/commands/*.md` is frontmatter + a prompt body. Match the exist
   never invent a topic.
 - **Inline bash** — `` !`date +%Y%m%d-%H%M%S` `` executes at command-run time to stamp the task
   directory name; this is why `Bash(date:*)` appears in `allowed-tools`. Capture the timestamp
-  at write time, never reuse one from earlier in the session.
+  at write time, never reuse one from earlier in the session. `/pmf:locate` additionally declares
+  `Bash(basename:*)`, `Bash(mkdir:*)`, `Bash(ls:*)` to derive the project slug and manage its
+  `~/.claude/locate-refs/` ref store — writing under that tree is the *only* write `locate` may do.
 - **Produce-phase shape** — these commands follow a strict interrogation discipline:
   ground/interrogate → surface flaws and resolve each WITH the user → only then write the output
   file. "Never write the output early / just in case" is a recurring guardrail; preserve it.
