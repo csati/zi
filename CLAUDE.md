@@ -83,6 +83,7 @@ phases of the `prompt → plan` flow:
 |---|---|
 | `/pmf:stage` | stage files for commit from a natural-language description (never commits) |
 | `/pmf:commit` | commit already-staged changes with a terse single-line message (never stages) |
+| `/pmf:locate` | locate code from a natural-language description (or recall a saved label); read-only except for saving references under `~/.claude/locate-refs/` |
 
 ## How commands are written (conventions to match when editing)
 
