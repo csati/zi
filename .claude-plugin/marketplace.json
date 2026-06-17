@@ -8,7 +8,7 @@
     {
       "name": "pmf",
       "source": "./plugins/pmf",
-      "description": "Prompt-to-plan helper: interrogate a rough idea into a refined prompt, then draft and independently verify an implementation plan (prompt → plan). Plus git stage and commit helpers."
+      "description": "Prompt-to-plan helper: interrogate a rough idea into a refined prompt, then draft and independently verify an implementation plan (prompt → plan). Plus an overnight-loop prompt generator, a code locator, and git stage/commit helpers."
     }
   ]
 }

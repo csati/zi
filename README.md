@@ -13,7 +13,7 @@ finds the first automatically (`prompt.md` → `plan.md`).
 
 ## The commands
 
-The plugin ships five slash commands — two planning phases, two git helpers, and a standalone overnight-loop generator:
+The plugin ships six slash commands — two planning phases, a standalone overnight-loop generator, two git helpers, and a code locator:
 
 | Command | Reads | Produces | Role |
 |---------|-------|----------|------|
@@ -22,6 +22,7 @@ The plugin ships five slash commands — two planning phases, two git helpers, a
 | `/pmf:overnight <goal>` | a loop GOAL | `.pmf/{slug}/overnight.md` | interrogate the goal, generate an unattended never-halt loop-orchestration prompt |
 | `/pmf:stage <desc>` | your description | staged files | stage files for commit from a natural-language description |
 | `/pmf:commit` | staged changes | a commit | commit staged changes with a terse single-line message |
+| `/pmf:locate <desc>` | a description or saved label | code pointers (+ a saved reference) | locate code from a natural-language description, or recall a saved one by label |
 
 **Clear context between phases.** Each phase's quality comes from a clean context that sees
 only the prior artifact. Both planning phases are interactive — you run them, answer their
@@ -57,6 +58,16 @@ autonomy risks of an unattended run — then writes a self-contained, generalize
 loop-orchestration prompt to `.pmf/{slug}/overnight.md`. It produces a **prompt only** and never
 runs the loop; the output is deliberately named `overnight.md` (not `prompt.md`) so `/pmf:plan`
 won't treat it as a plannable pipeline prompt.
+
+### `/pmf:locate` — point me at the code
+
+Turns a natural-language description (a behavior, concept, or partial symbol) into precise code
+pointers — file path, line, enclosing class/module, and symbol — grounded by real `Glob`/`Grep`/`Read`
+(escalating to a read-only `Explore` subagent when a few grep rounds don't narrow it), never a
+guessed path. It is **read-only for your repo**; the only thing it writes is a small reference under
+`~/.claude/locate-refs/<project>/` so you can recall the result later by a short label
+(`/pmf:locate jwt-validator`). Use it to be *pointed at* code, not to have it explained or changed —
+it's a lookup helper, not part of the `prompt → plan` flow.
 
 ## Install
 
@@ -95,7 +106,7 @@ pmf/                                   ← repo root = the "ncs-plugins" marketp
 ├── .claude-plugin/marketplace.json    ← the catalog (lists the pmf plugin)
 ├── plugins/pmf/                       ← the plugin itself
 │   ├── .claude-plugin/plugin.json
-│   └── commands/   prompt, plan, overnight, stage, commit
+│   └── commands/   prompt, plan, overnight, stage, commit, locate
 ├── README.md
 ├── CLAUDE.md
 └── LICENSE
@@ -109,5 +120,6 @@ After install, commands are namespaced **`/pmf:<command>`** (e.g. `/pmf:prompt`)
   committing the code is a separate step you drive yourself.
 - **Independence is the point.** `/pmf:plan`'s verification runs in a fresh subagent with no
   view of the planning conversation — it reports findings, it never silently rewrites the plan.
-- **`stage` and `commit`** are general-purpose git helpers bundled alongside the planning
-  commands — handy, but not part of the `prompt → plan` flow itself.
+- **`stage`, `commit`, and `locate`** are general-purpose helpers bundled alongside the planning
+  commands — handy, but not part of the `prompt → plan` flow itself. `locate` is read-only for your
+  repo (it only writes recallable references under `~/.claude/locate-refs/`).
