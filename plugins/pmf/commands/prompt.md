@@ -40,9 +40,12 @@ If the input above is empty, ask the user what the prompt should achieve before 
 1. Restate the idea in your own words so the user can confirm you parsed it correctly.
 2. Ground first: verify real paths, symbols, and conventions with Read/Grep/Glob before
    forming questions, so questions are specific to this repo, never generic.
-3. Interrogate in clusters — never a wall of 20. Batch discrete choices into a single
-   `AskUserQuestion` call; ask conversationally otherwise. No arbitrary question cap, but never
-   pad with questions the code already answers.
+3. Route every decision, confirmation, and open-ended clarification through `AskUserQuestion` —
+   exactly **one question per call, asked sequentially**, never batched into one call. Open-ended
+   clarifications still use `AskUserQuestion`, always carrying a "(Recommended)" option; when the
+   suggestion's confidence is low, say so explicitly in the question text. The free-text "Other"
+   path covers genuinely open answers. No arbitrary question cap, but never pad with questions the
+   code already answers.
 
    Silently confirm the spec will be able to pin each of these. A missing "must" item is a
    blocking gap — ask; do not guess:
@@ -62,7 +65,11 @@ Before producing anything, explicitly raise — grounded in what you found in th
 - **Undesired side effects** — data loss, breaking changes, scope creep, security/privacy concerns, cost.
 - **Hidden assumptions** the user may not realize they're making.
 
-Present these plainly and **wait for the user to confirm or resolve each warning**. Do not proceed past unresolved warnings.
+Present these as **batched** `AskUserQuestion` calls — one call with up to the tool's 4-question
+max; when more than 4 risks exist, emit multiple sequential `AskUserQuestion` calls of ≤4 each
+(never merge or drop risks to fit 4, never fall back to prose). Each risk question offers
+**"Accept the risk (Recommended)"**, **"Mitigate — <specific action>"**, and a discuss/free-text
+path. Do not proceed past unresolved warnings.
 
 ### Phase 3 — Generate the refined prompt file
 

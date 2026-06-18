@@ -122,7 +122,8 @@ batch:
 2. **Recommend a specific fix.**
 3. **Resolve it with the user** via `AskUserQuestion` — offer the recommended fix first
    (label it "(Recommended)"), any meaningful alternative, and an explicit **"Keep as-is"**
-   option. The user may also type a custom resolution.
+   option. Always carry a recommended option; when the recommendation's confidence is low, the
+   question text must say so explicitly. The user may also type a custom resolution.
 4. **Immediately apply the resolution** to the harness plan file with `Edit` before raising the
    next finding — either make the fix, or leave it and note the deliberate decision.
 

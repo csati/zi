@@ -151,5 +151,6 @@ commands:
 - **Report vs. fix is a hard line.** The verification subagent surfaces findings; fixes are
   applied only after the user resolves each one. The plan-only commands never implement code.
 - **Resolve in code what the code can answer; only ask the user for intent and decisions.**
-  Interrogate in clusters, never a wall of questions, and never pad with questions the code
-  already answers.
+  Ask decisions and clarifications one question per call, sequentially, via `AskUserQuestion`;
+  present risks/consequences as batched `AskUserQuestion` calls (≤4 each), and never pad with
+  questions the code already answers.

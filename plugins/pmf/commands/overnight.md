@@ -43,8 +43,12 @@ anything else. Do not invent a topic.
 2. Ground first: detect the repo's technology by reading real build/config files — e.g.
    `package.json`, `build.gradle*`, `Cargo.toml`, `pyproject.toml`, and any lint/format configs —
    with Read/Grep/Glob, so questions and the recommended gate are specific to this repo.
-3. Interrogate intent in clusters via `AskUserQuestion` — never a wall of questions; never pad
-   with questions the code already answers. Pin the GOAL as an **end state** (not a step list),
+3. Route every decision, confirmation, and open-ended clarification through `AskUserQuestion` —
+   exactly **one question per call, asked sequentially**, never batched. Open-ended clarifications
+   still use `AskUserQuestion`, always carrying a "(Recommended)" option; when the suggestion's
+   confidence is low, say so explicitly in the question text. The free-text "Other" path covers
+   genuinely open answers; never pad with questions the code already answers. Pin the GOAL as an
+   **end state** (not a step list),
    what may be touched, and when the loop should consider itself "done enough".
 4. **Recommend a concrete verification gate** grounded in the detected stack — typically a
    compile/build-error check plus a formatting/style-lint check — and have the user confirm or
@@ -61,8 +65,11 @@ each:
 - **"Verified" means it passes the gate**, not that it works at runtime.
 - The loop assumes **bypassPermissions** mode so tool calls never prompt.
 
-Present these plainly and **wait for the user to acknowledge or resolve each warning**. Do not
-proceed past unresolved warnings.
+Present these as **batched** `AskUserQuestion` calls — one call with up to the tool's 4-question
+max; since there are **five fixed risks** (above), cover them with **two sequential calls (4 + 1)**
+(never merge or drop risks to fit 4, never fall back to prose). Each risk question offers
+**"Accept the risk (Recommended)"**, **"Mitigate — <specific action>"**, and a discuss/free-text
+path. Do not proceed past unresolved warnings.
 
 ### Phase 3 — Generate the loop-prompt file
 
