@@ -148,8 +148,17 @@ nothing, say so plainly and proceed.
      Derive a **1–4 word** kebab-case `{description}` slug that identifies the task (e.g.
      `auth-token-refresh`, `csv-export`), create `.pmf/{YYYYMMDD-HHmmss}-{description}/` (and
      `.pmf/` itself) if it does not yet exist, and write `plan.md` inside it.
-3. Tell the user the exact path you wrote (including the `.pmf/{slug}/` prefix). Do **not** start
-   implementing.
+3. Tell the user the exact path you wrote (including the `.pmf/{slug}/` prefix). After
+   reporting the path, also print — on its own line — a fenced code block whose sole content
+   is a bare file-mention of the plan you just wrote, with the **actual** resolved path (never
+   the literal `{slug}`), so it can be copy-pasted in one tap to start an implementation
+   session (e.g. from the Android Claude app over a remote-control session):
+
+   ```
+   @.pmf/20260101-000000-example/plan.md
+   ```
+
+   Do **not** start implementing.
 
 ## Guardrails
 

@@ -116,4 +116,11 @@ A short top heading naming the problem is fine; it does not count toward the sen
 6. Have you derived the fresh timestamp + slug and the exact `.pmf/{slug}/prompt.md` path?
 
 If any answer is no, fix it before writing; then write and tell the user the exact path
-(including the `.pmf/{slug}/` prefix).
+(including the `.pmf/{slug}/` prefix). After reporting the path, also print — on its own line —
+a fenced code block whose sole content is the recommended next command with the **actual**
+resolved path you just wrote (never the literal `{slug}`), so it can be copy-pasted in one tap
+(e.g. from the Android Claude app over a remote-control session):
+
+```
+/pmf:plan @.pmf/20260101-000000-example/prompt.md
+```

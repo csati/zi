@@ -141,4 +141,12 @@ load-bearing parts:
 6. Does the command itself stop after writing — not launch, run, or schedule the loop?
 
 If any answer is no, fix it before writing; then write and tell the user the exact path
-(including the `.pmf/{slug}/` prefix).
+(including the `.pmf/{slug}/` prefix). After reporting the path, also print — on its own line —
+a fenced code block whose sole content is a bare file-mention of the loop prompt you just
+wrote, with the **actual** resolved path (never the literal `{slug}`), so you can copy-paste it
+in one tap to start the never-halt loop session yourself (e.g. from the Android Claude app over
+a remote-control session); this command still never launches, runs, or schedules the loop:
+
+```
+@.pmf/20260101-000000-example/overnight.md
+```
