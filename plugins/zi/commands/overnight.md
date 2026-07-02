@@ -26,7 +26,7 @@ allowed-tools: Bash(date:*), Read, Grep, Glob, AskUserQuestion, Write
 
 Refine a rough GOAL through dialogue until you understand **exactly** what the unattended loop
 should pursue, then persist a concise, self-contained, generalized loop-orchestration prompt to
-`.pmf/{slug}/overnight.md` for the user to later feed to a never-halting agent session.
+`.zi/{slug}/overnight.md` for the user to later feed to a never-halting agent session.
 
 ## Raw goal
 
@@ -83,13 +83,13 @@ Only once **all** are true — intent confirmed AND every risk resolved AND the 
 2. Derive a **1–4 word** kebab-case slug that identifies the goal (e.g. `rest-api-buildout`,
    `test-coverage`).
 
-3. Create the task directory `.pmf/{YYYYMMDD-HHmmss}-{slug}/` in the current working directory
-   (create `.pmf/` and the task directory if they do not yet exist), and `Write` the generated
-   prompt to a **distinct filename** — NOT `prompt.md` — so `/pmf:plan` never mistakes it for a
+3. Create the task directory `.zi/{YYYYMMDD-HHmmss}-{slug}/` in the current working directory
+   (create `.zi/` and the task directory if they do not yet exist), and `Write` the generated
+   prompt to a **distinct filename** — NOT `prompt.md` — so `/zi:plan` never mistakes it for a
    plannable pipeline prompt:
 
    ```
-   .pmf/{YYYYMMDD-HHmmss}-{slug}/overnight.md
+   .zi/{YYYYMMDD-HHmmss}-{slug}/overnight.md
    ```
 
 ## Output file contents — the generated `overnight.md`
@@ -102,7 +102,7 @@ load-bearing parts:
 - **Orchestration** — a main agent that ONLY orchestrates: never edits code, never uses
   `AskUserQuestion`. Each iteration it spawns **exactly one** subagent (strictly sequential,
   never parallel), waits for completion, appends a one-line result to a durable on-disk
-  progress/backlog file kept as a sibling in this same `.pmf/{slug}/` task directory (named
+  progress/backlog file kept as a sibling in this same `.zi/{slug}/` task directory (named
   `progress.md`), treats that file (not conversation memory) as the source of truth, then
   immediately spawns the next — relying on harness context-summarization to loop indefinitely.
   The orchestrator's FIRST action is a baseline gate run, fixing any pre-existing red before the
@@ -137,16 +137,16 @@ load-bearing parts:
 3. Does the generated prompt state an explicit **commit cadence and never-commit-red invariant**,
    and the **write-scope boundary** (writes confined to this repo)?
 4. Is the output filename `overnight.md` (NOT `prompt.md`)?
-5. Have you derived a fresh timestamp + slug and the exact `.pmf/{slug}/overnight.md` path?
+5. Have you derived a fresh timestamp + slug and the exact `.zi/{slug}/overnight.md` path?
 6. Does the command itself stop after writing — not launch, run, or schedule the loop?
 
 If any answer is no, fix it before writing; then write and tell the user the exact path
-(including the `.pmf/{slug}/` prefix). After reporting the path, also print — on its own line —
+(including the `.zi/{slug}/` prefix). After reporting the path, also print — on its own line —
 a fenced code block whose sole content is a bare file-mention of the loop prompt you just
 wrote, with the **actual** resolved path (never the literal `{slug}`), so you can copy-paste it
 in one tap to start the never-halt loop session yourself (e.g. from the Android Claude app over
 a remote-control session); this command still never launches, runs, or schedules the loop:
 
 ```
-@.pmf/20260101-000000-example/overnight.md
+@.zi/20260101-000000-example/overnight.md
 ```

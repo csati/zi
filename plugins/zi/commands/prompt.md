@@ -24,7 +24,7 @@ allowed-tools: Bash(date:*), Read, Grep, Glob, AskUserQuestion, Write
 ## Objective
 
 Refine the user's rough idea through dialogue until you understand **exactly** what they
-intend, then persist a concise, self-contained spec to `.pmf/{slug}/prompt.md` for a future
+intend, then persist a concise, self-contained spec to `.zi/{slug}/prompt.md` for a future
 agent or session to act on.
 
 ## Raw idea
@@ -87,10 +87,10 @@ Then:
 
 2. Derive a **1–4 word** kebab-case `description` slug that identifies the problem (e.g. `auth-token-refresh`, `csv-export`).
 
-3. This command starts the task, so it **creates the task directory**: `.pmf/{YYYYMMDD-HHmmss}-{description}/` in the current working directory (create `.pmf/` and the task directory if they do not yet exist). Every later phase writes its artifact as a sibling inside this same directory. Write the prompt file named exactly:
+3. This command starts the task, so it **creates the task directory**: `.zi/{YYYYMMDD-HHmmss}-{description}/` in the current working directory (create `.zi/` and the task directory if they do not yet exist). Every later phase writes its artifact as a sibling inside this same directory. Write the prompt file named exactly:
 
    ```
-   .pmf/{YYYYMMDD-HHmmss}-{description}/prompt.md
+   .zi/{YYYYMMDD-HHmmss}-{description}/prompt.md
    ```
 
 ## Output file contents
@@ -113,14 +113,14 @@ A short top heading naming the problem is fine; it does not count toward the sen
 3. Is every resolved decision (and every important rejected option) recorded?
 4. Is every path/symbol named in the spec one you actually verified?
 5. Self-contained, ≤20 sentences, no process chatter?
-6. Have you derived the fresh timestamp + slug and the exact `.pmf/{slug}/prompt.md` path?
+6. Have you derived the fresh timestamp + slug and the exact `.zi/{slug}/prompt.md` path?
 
 If any answer is no, fix it before writing; then write and tell the user the exact path
-(including the `.pmf/{slug}/` prefix). After reporting the path, also print — on its own line —
+(including the `.zi/{slug}/` prefix). After reporting the path, also print — on its own line —
 a fenced code block whose sole content is the recommended next command with the **actual**
 resolved path you just wrote (never the literal `{slug}`), so it can be copy-pasted in one tap
 (e.g. from the Android Claude app over a remote-control session):
 
 ```
-/pmf:plan @.pmf/20260101-000000-example/prompt.md
+/zi:plan @.zi/20260101-000000-example/prompt.md
 ```

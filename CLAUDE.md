@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-`pmf` is a **Claude Code plugin**, not an application. It has no build, no test runner, and no
+`zi` is a **Claude Code plugin**, not an application. It has no build, no test runner, and no
 dependencies. The repo is **self-contained**: its root is a one-plugin marketplace
-(`.claude-plugin/marketplace.json`, name `ncs-plugins`) and the plugin lives in `plugins/pmf/`.
+(`.claude-plugin/marketplace.json`, name `ncs-plugins`) and the plugin lives in `plugins/zi/`.
 The plugin ships exactly one kind of artifact:
 
-- **Slash commands** — `plugins/pmf/commands/*.md`, each a Markdown file with YAML frontmatter.
+- **Slash commands** — `plugins/zi/commands/*.md`, each a Markdown file with YAML frontmatter.
   These ARE the product: the body is the prompt Claude executes when the command is invoked.
 
 Editing any command `.md` is picked up live by an installed plugin — no rebuild. There is
@@ -18,44 +18,44 @@ command.
 
 ## Install / validate / develop
 
-The repo root is the marketplace; `plugins/pmf/` is the plugin. For local development add the
+The repo root is the marketplace; `plugins/zi/` is the plugin. For local development add the
 repo itself as a marketplace:
 
 ```
-/plugin marketplace add /path/to/pmf   # register this repo as a marketplace
-/plugin install pmf@ncs-plugins        # install the plugin
-/plugin validate /path/to/pmf          # validate before installing
+/plugin marketplace add /path/to/zi   # register this repo as a marketplace
+/plugin install zi@ncs-plugins        # install the plugin
+/plugin validate /path/to/zi          # validate before installing
 ```
 
 To share with colleagues, push the repo to a git host; they run `/plugin marketplace add
-<owner>/pmf` then `/plugin install pmf@ncs-plugins`. Relative plugin sources resolve only when
+<owner>/zi` then `/plugin install zi@ncs-plugins`. Relative plugin sources resolve only when
 the marketplace is added over git or a local path — not via a bare URL to `marketplace.json`.
 
-After install, commands are namespaced **`/pmf:<command>`** (e.g. `/pmf:prompt`). Command
+After install, commands are namespaced **`/zi:<command>`** (e.g. `/zi:prompt`). Command
 `.md` edits apply live; if you change `marketplace.json` or `plugin.json`, run
 `/plugin marketplace update`. When shipping a change colleagues will pull, bump `version` in
-`plugins/pmf/.claude-plugin/plugin.json` (currently `1.0.0`) so installs pick it up.
+`plugins/zi/.claude-plugin/plugin.json` (currently `1.0.0`) so installs pick it up.
 
 ## The core architecture: a directory-per-task, context-cleared flow
 
 The plugin turns a rough idea into a verified implementation plan through two phases, each run
 with a **fresh/cleared context** so it sees only the prior artifact, not the whole history.
 The phases find each other through one convention — **every artifact for one feature lives
-together in a per-task directory** `.pmf/{ts}-{desc}/` in the current working directory (`ts` =
+together in a per-task directory** `.zi/{ts}-{desc}/` in the current working directory (`ts` =
 `YYYYMMDD-HHmmss`, `desc` = 1–4 word kebab slug; the directory name is the feature's slug,
-created on first write by `/pmf:prompt`). Within it the artifacts are named by phase:
+created on first write by `/zi:prompt`). Within it the artifacts are named by phase:
 
 ```
 prompt.md  →  plan.md  →  (you implement the code yourself)
-/pmf:prompt    /pmf:plan
+/zi:prompt    /zi:plan
 ```
 
-After `/pmf:plan` writes `plan.md`, **the user implements the code themselves** — the plugin
+After `/zi:plan` writes `plan.md`, **the user implements the code themselves** — the plugin
 stops at the verified plan. There is no automated, self-committing back half.
 
-The task directory is load-bearing. When `/pmf:plan` is given a prompt that lives **inside an
-existing `.pmf/{slug}/` directory**, it writes `plan.md` as a **sibling** in that same directory
-so the two stay paired; only when the source is inline text or a file outside `.pmf/` does it
+The task directory is load-bearing. When `/zi:plan` is given a prompt that lives **inside an
+existing `.zi/{slug}/` directory**, it writes `plan.md` as a **sibling** in that same directory
+so the two stay paired; only when the source is inline text or a file outside `.zi/` does it
 create a fresh task directory. Preserve this when editing either produce-phase command — moving
 an artifact out of its task directory breaks how the next phase locates its input.
 
@@ -63,37 +63,37 @@ an artifact out of its task directory breaks how the next phase locates its inpu
 
 | Command | Reads | Writes | Role |
 |---|---|---|---|
-| `/pmf:prompt` | a rough idea | `{slug}/prompt.md` | interrogate intent, surface flaws/side effects, save refined prompt |
-| `/pmf:plan` | `{slug}/prompt.md`, a task-dir reference, or inline text | `{slug}/plan.md` | draft a plan, independently verify it, persist on approval |
+| `/zi:prompt` | a rough idea | `{slug}/prompt.md` | interrogate intent, surface flaws/side effects, save refined prompt |
+| `/zi:plan` | `{slug}/prompt.md`, a task-dir reference, or inline text | `{slug}/plan.md` | draft a plan, independently verify it, persist on approval |
 
 Note: `plan.md`'s frontmatter `description` contrasts itself with a fuller
 `prompt→research→prd→decompose` pipeline. That larger pipeline is **aspirational/comparative
 wording** — only `prompt → plan` ships in this repo, so don't go hunting for `research`, `prd`,
 or `decompose` commands.
 
-`/pmf:overnight` is a **standalone produce command**: it follows the same produce-phase
+`/zi:overnight` is a **standalone produce command**: it follows the same produce-phase
 interrogation discipline (ground → interrogate → surface-risks → write-on-gate) but is **not** a
 step of the `prompt → plan` pipeline. It interrogates a loop GOAL and generates an unattended,
 never-halt loop-orchestration prompt, written to `{slug}/overnight.md` — a **distinct filename**
-(NOT `prompt.md`) chosen precisely so `/pmf:plan` never consumes it as a plannable pipeline
+(NOT `prompt.md`) chosen precisely so `/zi:plan` never consumes it as a plannable pipeline
 prompt. It writes the prompt only and never launches the loop.
 
 | Command | Reads | Writes | Role |
 |---|---|---|---|
-| `/pmf:overnight` | a loop GOAL | `{slug}/overnight.md` | interrogate the goal, generate an unattended never-halt loop-orchestration prompt (never runs the loop) |
+| `/zi:overnight` | a loop GOAL | `{slug}/overnight.md` | interrogate the goal, generate an unattended never-halt loop-orchestration prompt (never runs the loop) |
 
 `stage` and `commit` are general-purpose git helpers bundled with the plugin — handy, but not
 phases of the `prompt → plan` flow:
 
 | Command | Role |
 |---|---|
-| `/pmf:stage` | stage files for commit from a natural-language description (never commits) |
-| `/pmf:commit` | commit already-staged changes with a terse single-line message (never stages) |
-| `/pmf:locate` | locate code from a natural-language description (or recall a saved label); read-only except for saving references under `~/.claude/locate-refs/<project>/<label>.md` (`<project>` = `basename "$PWD"`, so refs are scoped per project; collisions suffix `-2`, `-3`, never overwrite) |
+| `/zi:stage` | stage files for commit from a natural-language description (never commits) |
+| `/zi:commit` | commit already-staged changes with a terse single-line message (never stages) |
+| `/zi:locate` | locate code from a natural-language description (or recall a saved label); read-only except for saving references under `~/.claude/locate-refs/<project>/<label>.md` (`<project>` = `basename "$PWD"`, so refs are scoped per project; collisions suffix `-2`, `-3`, never overwrite) |
 
 ## How commands are written (conventions to match when editing)
 
-Each `plugins/pmf/commands/*.md` is frontmatter + a prompt body. Match the existing structure:
+Each `plugins/zi/commands/*.md` is frontmatter + a prompt body. Match the existing structure:
 
 - **Frontmatter** — `description` (shown in the picker), `argument-hint`, and `allowed-tools`.
   `allowed-tools` is a real permission boundary: list only what the command needs, scoped
@@ -101,25 +101,25 @@ Each `plugins/pmf/commands/*.md` is frontmatter + a prompt body. Match the exist
   omit `allowed-tools` deliberately — they run plain git through the user's normal permissions.)
 - **`$ARGUMENTS`** — placeholder the body uses to receive the invocation argument. The
   produce-commands resolve it: if it's a path to an existing file, read it; a path or bare
-  `{slug}` naming a `.pmf/{slug}/` task directory resolves to the expected file inside it;
+  `{slug}` naming a `.zi/{slug}/` task directory resolves to the expected file inside it;
   otherwise the argument text is treated as the inline prompt. Empty argument → ask the user,
   never invent a topic.
 - **Inline bash** — `` !`date +%Y%m%d-%H%M%S` `` executes at command-run time to stamp the task
   directory name; this is why `Bash(date:*)` appears in `allowed-tools`. Capture the timestamp
-  at write time, never reuse one from earlier in the session. `/pmf:locate` additionally declares
+  at write time, never reuse one from earlier in the session. `/zi:locate` additionally declares
   `Bash(basename:*)`, `Bash(mkdir:*)`, `Bash(ls:*)` to derive the project slug and manage its
   `~/.claude/locate-refs/` ref store — writing under that tree is the *only* write `locate` may do.
 - **Produce-phase shape** — these commands follow a strict interrogation discipline:
   ground/interrogate → surface flaws and resolve each WITH the user → only then write the output
   file. "Never write the output early / just in case" is a recurring guardrail; preserve it.
 
-## The `/pmf:plan` independent-verification design
+## The `/zi:plan` independent-verification design
 
-`/pmf:plan` is the most involved command; its value comes from a specific four-phase shape that
+`/zi:plan` is the most involved command; its value comes from a specific four-phase shape that
 must be preserved if you edit it:
 
 1. **Draft in plan mode** — `EnterPlanMode`, ground in the real codebase with Read/Grep/Glob,
-   then write the plan to the **harness plan file** (not yet to `.pmf/`). Describe intent and
+   then write the plan to the **harness plan file** (not yet to `.zi/`). Describe intent and
    target interfaces, never pasted final source.
 2. **Independent verification** — launch **one fresh subagent** (`Task`, a read-only `Explore`
    or an explicitly read-only `general-purpose`) that has **no view of the planning
@@ -133,7 +133,7 @@ must be preserved if you edit it:
    recommended fix, a meaningful alternative, and an explicit "Keep as-is"), then immediately
    apply the resolution to the plan file before raising the next.
 4. **Approve, then persist** — `ExitPlanMode` for approval, and **only after approval** `Write`
-   the final `plan.md` (sibling of an existing `.pmf/` prompt, else a fresh task directory).
+   the final `plan.md` (sibling of an existing `.zi/` prompt, else a fresh task directory).
 
 ## Cross-cutting principles encoded in these commands
 

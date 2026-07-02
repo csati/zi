@@ -1,6 +1,6 @@
 {
-  "name": "pmf",
-  "displayName": "PMF — Prompt to Plan",
+  "name": "zi",
+  "displayName": "ZI — Prompt to Plan",
   "description": "Turn a rough idea into a refined prompt and a verified implementation plan through context-cleared phases (prompt → plan), with an independent subagent verifying the plan, plus an overnight-loop prompt generator, a code locator, and git stage/commit helpers.",
   "version": "1.0.0",
   "license": "MIT",

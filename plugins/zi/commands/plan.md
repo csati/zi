@@ -1,5 +1,5 @@
 ---
-description: Turn a prompt (inline or a prompt file) into a verified implementation plan — explore and draft in plan mode, have a fresh subagent independently verify it against the prompt and the codebase, interrogate the findings with the user one at a time, update the plan, and on approval persist it to .pmf/{slug}/plan.md. Use for a single quick plan rather than the full prompt→research→prd→decompose pipeline.
+description: Turn a prompt (inline or a prompt file) into a verified implementation plan — explore and draft in plan mode, have a fresh subagent independently verify it against the prompt and the codebase, interrogate the findings with the user one at a time, update the plan, and on approval persist it to .zi/{slug}/plan.md. Use for a single quick plan rather than the full prompt→research→prd→decompose pipeline.
 argument-hint: [prompt file path / task-directory reference, or the problem statement text itself]
 allowed-tools: Bash(date:*), Read, Grep, Glob, Task, AskUserQuestion, EnterPlanMode, ExitPlanMode, Write, Edit
 ---
@@ -11,7 +11,7 @@ allowed-tools: Bash(date:*), Read, Grep, Glob, Task, AskUserQuestion, EnterPlanM
 Turn a prompt — inline text or a prompt file — into a **verified** implementation plan. Draft
 the plan in plan mode, have a **fresh, independent subagent** verify it against the prompt and
 the actual codebase, interrogate every finding with the user one at a time, update the plan,
-and — only on approval — persist it to `.pmf/{slug}/plan.md`. This is a standalone quick
+and — only on approval — persist it to `.zi/{slug}/plan.md`. This is a standalone quick
 planner, not a step in the prompt→research→prd→decompose pipeline.
 
 ## Operating rules
@@ -27,16 +27,16 @@ planner, not a step in the prompt→research→prd→decompose pipeline.
   only after the user resolves each one.
 - **Plan only — never implement.** On approval this command persists the plan file and stops.
   Writing code is a separate, later step the user initiates.
-- **Never persist early or "just in case."** The `.pmf/{slug}/plan.md` artifact is written only
+- **Never persist early or "just in case."** The `.zi/{slug}/plan.md` artifact is written only
   after the Phase 4 approval gate opens.
 
 ## Input
 
 The argument may be **either** of the following — resolve it before doing anything else:
 
-- **A prompt file or task directory** — a file path, a path to a `.pmf/{slug}/` task directory,
-  or a bare `{slug}` naming one (e.g. `.pmf/20260605-143000-csv-export/prompt.md`,
-  `.pmf/20260605-143000-csv-export`, or `20260605-143000-csv-export`). If it resolves to a
+- **A prompt file or task directory** — a file path, a path to a `.zi/{slug}/` task directory,
+  or a bare `{slug}` naming one (e.g. `.zi/20260605-143000-csv-export/prompt.md`,
+  `.zi/20260605-143000-csv-export`, or `20260605-143000-csv-export`). If it resolves to a
   prompt file, read it and treat its contents as the prompt.
 - **The problem statement text itself** — inline prose describing what to plan.
 
@@ -47,8 +47,8 @@ $ARGUMENTS
 Resolution rules:
 
 1. If the argument is a path to an existing file, read it and use its contents as the prompt.
-2. If the argument points to a task directory — `.pmf/{slug}/`, or a bare `{slug}` that exists
-   as `.pmf/{slug}/` — read `prompt.md` inside it and use its contents as the prompt.
+2. If the argument points to a task directory — `.zi/{slug}/`, or a bare `{slug}` that exists
+   as `.zi/{slug}/` — read `prompt.md` inside it and use its contents as the prompt.
 3. Otherwise, treat the argument text verbatim as the prompt.
 4. If the argument is empty, ask the user what they want planned before continuing. Do not
    invent a topic.
@@ -58,7 +58,7 @@ file the argument resolves to (rule 1 or 2). Do **not** Read/Grep/Glob the codeb
 resolution — all codebase exploration happens *inside* plan mode in Phase 1, never before it.
 
 **Remember where the prompt came from.** If it resolved to a file **inside an existing
-`.pmf/{slug}/` directory**, note that — it decides where the plan is persisted in Phase 4.
+`.zi/{slug}/` directory**, note that — it decides where the plan is persisted in Phase 4.
 Then confirm the resolved prompt back to the user (and the resolved file path, if any) so they
 have explicit feedback on exactly what this command is about to plan.
 
@@ -136,26 +136,26 @@ nothing, say so plainly and proceed.
    the verified plan for approval. Include any `allowedPrompts` the plan's implementation will
    need (e.g. "run tests", "install dependencies").
 2. **After approval** (plan mode exits, so `Write` is now permitted), persist the final plan to
-   `.pmf/{slug}/plan.md`:
-   - **If the prompt came from a file inside an existing `.pmf/{slug}/` directory** — write
+   `.zi/{slug}/plan.md`:
+   - **If the prompt came from a file inside an existing `.zi/{slug}/` directory** — write
      `plan.md` as a **sibling** in that same directory, so it stays paired with its source.
-   - **Otherwise** (inline text, or a file outside `.pmf/`) — create a fresh task directory.
+   - **Otherwise** (inline text, or a file outside `.zi/`) — create a fresh task directory.
      Capture a fresh timestamp at write time:
 
      !`date +%Y%m%d-%H%M%S`
 
      Use the value produced above (re-run it yourself if the embedded value looks stale).
      Derive a **1–4 word** kebab-case `{description}` slug that identifies the task (e.g.
-     `auth-token-refresh`, `csv-export`), create `.pmf/{YYYYMMDD-HHmmss}-{description}/` (and
-     `.pmf/` itself) if it does not yet exist, and write `plan.md` inside it.
-3. Tell the user the exact path you wrote (including the `.pmf/{slug}/` prefix). After
+     `auth-token-refresh`, `csv-export`), create `.zi/{YYYYMMDD-HHmmss}-{description}/` (and
+     `.zi/` itself) if it does not yet exist, and write `plan.md` inside it.
+3. Tell the user the exact path you wrote (including the `.zi/{slug}/` prefix). After
    reporting the path, also print — on its own line — a fenced code block whose sole content
    is a bare file-mention of the plan you just wrote, with the **actual** resolved path (never
    the literal `{slug}`), so it can be copy-pasted in one tap to start an implementation
    session (e.g. from the Android Claude app over a remote-control session):
 
    ```
-   @.pmf/20260101-000000-example/plan.md
+   @.zi/20260101-000000-example/plan.md
    ```
 
    Do **not** start implementing.
@@ -164,7 +164,7 @@ nothing, say so plainly and proceed.
 
 - **Plan mode first.** `EnterPlanMode` is the first action after the prompt is resolved; no
   codebase Read/Grep/Glob happens before it. Resolution itself only reads the prompt file.
-- **Never persist early.** The `.pmf/{slug}/plan.md` artifact is written only after the Phase 4
+- **Never persist early.** The `.zi/{slug}/plan.md` artifact is written only after the Phase 4
   approval gate — never "just in case."
 - **Independence is mandatory.** The verifier is a fresh subagent with no view of this
   conversation, not a self-review pass.
