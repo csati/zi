@@ -1,6 +1,6 @@
 ---
 description: Interrogate a rough idea until intent is crystal clear, surface flaws and side effects, then save a refined prompt spec to the working directory. Use when the user wants to turn a vague request into a precise, confirmed prompt file. Not for implementing code or for prompts aimed at non-pipeline tools.
-argument-hint: [short description of what the prompt should achieve]
+argument-hint: [description of what the prompt should achieve]
 allowed-tools: Bash(date:*), Read, Grep, Glob, AskUserQuestion, Write
 ---
 
@@ -31,7 +31,14 @@ agent or session to act on.
 
 $ARGUMENTS
 
-If the input above is empty, ask the user what the prompt should achieve before doing anything else. Do not invent a topic.
+Resolve the input above before doing anything else:
+
+1. If it is a path to an existing file, read it and treat its contents as the raw idea.
+2. Otherwise, treat the argument text verbatim as the raw idea.
+3. If it is empty, ask the user what the prompt should achieve. Do not invent a topic.
+
+When it resolved to a file, name the file you read when restating the idea in Phase 1, so the
+user has explicit feedback on exactly what is being refined.
 
 ## Process
 
@@ -80,8 +87,9 @@ Only once **both** are true:
 
 Then:
 
-1. At write time, run `date +%Y%m%d-%H%M%S` and use that exact value — do not reuse a timestamp
-   captured earlier in the session.
+1. Use the timestamp below, captured when the command was invoked. Its exact value is not
+   important — it only dates the session and gives task directories a natural ordering — so do
+   not re-derive it; only if it is missing, run `date +%Y%m%d-%H%M%S` yourself.
 
    !`date +%Y%m%d-%H%M%S`
 
@@ -97,7 +105,10 @@ Then:
 
 A tight, self-contained refined prompt:
 
-- **Keep it under 20 sentences total.**
+- **Sentence budget: 20, plus one extra sentence per decision the user resolved** (Phase-1
+  answers and Phase-2 resolutions; a rejected-option record spends its decision's extra
+  sentence). The pressure to stay short is deliberate — but never cut a resolved decision to
+  fit the budget.
 - Capture the confirmed intent, the key constraints, and what is explicitly out of scope.
 - **Every decision the user resolved in Phase 2 MUST appear in the spec as an explicit constraint** — and record important rejected options too ("NOT doing X because Y"). Research re-derives facts from the code but NEVER re-derives your decisions, so an omitted decision is silently re-opened downstream and may be resolved differently.
 - **Any file path, symbol, or convention named in the spec MUST be one you verified exists.** Do not invent or guess anchors; if you could not verify something the spec needs, describe it generically rather than asserting a false specific.
@@ -112,8 +123,9 @@ A short top heading naming the problem is fine; it does not count toward the sen
 2. Does the spec pin every "must" dimension from the Phase-1 checklist?
 3. Is every resolved decision (and every important rejected option) recorded?
 4. Is every path/symbol named in the spec one you actually verified?
-5. Self-contained, ≤20 sentences, no process chatter?
-6. Have you derived the fresh timestamp + slug and the exact `.zi/{slug}/prompt.md` path?
+5. Self-contained, within the sentence budget (20 + one per resolved decision), no process
+   chatter?
+6. Have you derived the timestamp + slug and the exact `.zi/{slug}/prompt.md` path?
 
 If any answer is no, fix it before writing; then write and tell the user the exact path
 (including the `.zi/{slug}/` prefix). After reporting the path, also print — on its own line —

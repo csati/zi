@@ -165,12 +165,14 @@ low — but the choice is always theirs.
 
 - **If the prompt came from a file inside an existing `.zi/{slug}/` directory** — write
   `plan.md` as a **sibling** in that same directory, so it stays paired with its source.
-- **Otherwise** (inline text, or a file outside `.zi/`) — create a fresh task directory. Capture
-  a fresh timestamp at write time:
+- **Otherwise** (inline text, or a file outside `.zi/`) — create a fresh task directory, stamped
+  with the timestamp below (captured when the command was invoked; its exact value is not
+  important — it only dates the session and gives task directories a natural ordering — so do
+  not re-derive it; only if it is missing, run `date +%Y%m%d-%H%M%S` yourself):
 
   !`date +%Y%m%d-%H%M%S`
 
-  Use the value produced above (re-run it yourself if the embedded value looks stale). Derive a
+  Derive a
   **1–4 word** kebab-case `{description}` slug that identifies the task (e.g.
   `auth-token-refresh`, `csv-export`), create `.zi/{YYYYMMDD-HHmmss}-{description}/` (and `.zi/`
   itself) if it does not yet exist, and write `plan.md` inside it.

@@ -108,8 +108,10 @@ Each `plugins/zi/commands/*.md` is frontmatter + a prompt body. Match the existi
   otherwise the argument text is treated as the inline prompt. Empty argument → ask the user,
   never invent a topic.
 - **Inline bash** — `` !`date +%Y%m%d-%H%M%S` `` executes at command-run time to stamp the task
-  directory name; this is why `Bash(date:*)` appears in `allowed-tools`. Capture the timestamp
-  at write time, never reuse one from earlier in the session. `/zi:locate` additionally declares
+  directory name; this is why `Bash(date:*)` appears in `allowed-tools`. The timestamp's exact
+  value is unimportant — it dates the session and gives task directories a natural ordering —
+  so commands use the invocation-time value as-is rather than re-deriving it at write time.
+  `/zi:locate` additionally declares
   `Bash(mkdir:*)`, `Bash(ls:*)` to manage its `.zi/location/` ref store in the current working
   directory — writing under that directory is the *only* write `locate` may do.
 - **Produce-phase shape** — these commands follow a strict interrogation discipline:

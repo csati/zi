@@ -83,8 +83,9 @@ path. Do not proceed past unresolved warnings.
 
 Only once **all** are true — intent confirmed AND every risk resolved AND the gate confirmed:
 
-1. At write time, run `date +%Y%m%d-%H%M%S` and use that exact value — do not reuse a timestamp
-   captured earlier in the session.
+1. Use the timestamp below, captured when the command was invoked. Its exact value is not
+   important — it only dates the session and gives task directories a natural ordering — so do
+   not re-derive it; only if it is missing, run `date +%Y%m%d-%H%M%S` yourself.
 
    !`date +%Y%m%d-%H%M%S`
 
@@ -154,7 +155,7 @@ confirmed GOAL and gate) stating these load-bearing parts:
 4. Does the generated prompt state an explicit **commit cadence and never-commit-red invariant**,
    and the **write-scope boundary** (writes confined to this repo)?
 5. Is the output filename `overnight.md` (NOT `prompt.md`)?
-6. Have you derived a fresh timestamp + slug and the exact `.zi/{slug}/overnight.md` path?
+6. Have you derived the timestamp + slug and the exact `.zi/{slug}/overnight.md` path?
 7. Does the command itself stop after writing — not launch, run, or schedule the loop?
 
 If any answer is no, fix it before writing; then write and tell the user the exact path
