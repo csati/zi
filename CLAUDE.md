@@ -89,7 +89,7 @@ phases of the `prompt → plan` flow:
 |---|---|
 | `/zi:stage` | stage files for commit from a natural-language description (never commits) |
 | `/zi:commit` | commit already-staged changes with a terse single-line message (never stages) |
-| `/zi:locate` | locate code from a natural-language description (or recall a saved label); read-only except for saving references under `~/.claude/locate-refs/<project>/<label>.md` (`<project>` = `basename "$PWD"`, so refs are scoped per project; collisions suffix `-2`, `-3`, never overwrite) |
+| `/zi:locate` | locate code from a natural-language description (or recall a saved label); read-only except for saving references under `.zi/location/<label>.md` in the current working directory (refs are scoped per project because the directory lives inside it; collisions suffix `-2`, `-3`, never overwrite) |
 
 ## How commands are written (conventions to match when editing)
 
@@ -107,8 +107,8 @@ Each `plugins/zi/commands/*.md` is frontmatter + a prompt body. Match the existi
 - **Inline bash** — `` !`date +%Y%m%d-%H%M%S` `` executes at command-run time to stamp the task
   directory name; this is why `Bash(date:*)` appears in `allowed-tools`. Capture the timestamp
   at write time, never reuse one from earlier in the session. `/zi:locate` additionally declares
-  `Bash(basename:*)`, `Bash(mkdir:*)`, `Bash(ls:*)` to derive the project slug and manage its
-  `~/.claude/locate-refs/` ref store — writing under that tree is the *only* write `locate` may do.
+  `Bash(mkdir:*)`, `Bash(ls:*)` to manage its `.zi/location/` ref store in the current working
+  directory — writing under that directory is the *only* write `locate` may do.
 - **Produce-phase shape** — these commands follow a strict interrogation discipline:
   ground/interrogate → surface flaws and resolve each WITH the user → only then write the output
   file. "Never write the output early / just in case" is a recurring guardrail; preserve it.

@@ -1,7 +1,7 @@
 ---
 description: Locate code in the current repository from a natural-language description — return the exact file path, line, enclosing class/module, and symbol. Also recalls a previously-saved locate result by its short label. Use to be *pointed at* code, not to have it explained, edited, or rewritten.
 argument-hint: [description of the code to find, or a saved label to recall]
-allowed-tools: Bash(basename:*), Bash(mkdir:*), Bash(ls:*), Bash(date:*), Read, Grep, Glob, Task, Write
+allowed-tools: Bash(mkdir:*), Bash(ls:*), Bash(date:*), Read, Grep, Glob, Task, Write
 ---
 
 # locate
@@ -67,13 +67,14 @@ Keep the response to the blocks above plus at most one sentence of context. No n
 
 After producing the normal output for a *new* locate query (not a recall), persist it so the user can refer back to it later by a short label.
 
+References live in a dedicated `.zi/locate/` directory in the current working directory. Because this directory is inside the project, references are already scoped per project — no separate project slug is needed.
+
 Steps:
 
-1. **Pick a 2-word kebab slug** from the user's query that captures the intent — e.g. `the function that validates JWT tokens` → `jwt-validator`, `where Hilt modules are wired up` → `hilt-wiring`. Lowercase, `[a-z0-9-]` only, exactly two meaningful words when possible.
-2. **Resolve the project slug** with `basename "$PWD"` (Bash). This scopes references per project.
-3. **Ensure the directory exists**: `mkdir -p ~/.claude/locate-refs/<project-slug>`.
-4. **Handle collisions by suffixing.** If `<label>.md` already exists, try `<label>-2.md`, `<label>-3.md`, … until you find a free name. Never overwrite — old references must be preserved.
-5. **Write the file** with this exact shape:
+1. **Pick a 2-word kebab slug** from the user's query that captures the intent — e.g. `the function that validates JWT tokens` → `jwt-validator`, `where Hilt modules are wired up` → `hilt-wiring`. Lowercase, `[a-z0-9-]` only, exactly two meaningful words when possible. This slug is the derived filename.
+2. **Ensure the directory exists**: `mkdir -p .zi/locate`.
+3. **Handle collisions by suffixing.** If `.zi/locate/<label>.md` already exists, try `<label>-2.md`, `<label>-3.md`, … until you find a free name. Never overwrite — old references must be preserved.
+4. **Write the file** at `.zi/locate/<label>.md` with this exact shape:
 
    ```markdown
    ---
@@ -86,7 +87,7 @@ Steps:
    <the exact pointer blocks you just printed to the user>
    ```
 
-6. **Append one trailing line** to the user-facing response, on its own line after the blocks:
+5. **Append one trailing line** to the user-facing response, on its own line after the blocks:
 
    ```
    saved as: <final-label>
@@ -94,17 +95,15 @@ Steps:
 
    Nothing else. No explanation, no path.
 
-Writing under `~/.claude/locate-refs/` is the **only** write this command is permitted to perform.
+Writing under `.zi/locate/` is the **only** write this command is permitted to perform.
 
 ## Recall a reference
 
 When the input is a recall (see **Recall vs. locate**), do **not** run any searches. Instead:
 
-1. Compute `<project-slug>` as above.
-2. Look for `~/.claude/locate-refs/<project-slug>/<label>.md`.
-3. If not found there, glob `~/.claude/locate-refs/*/<label>.md`. If exactly one match, use it. If multiple, list the matching project slugs and ask which one.
-4. If still nothing, say so and print `ls ~/.claude/locate-refs/<project-slug>/` (or a note that the project dir doesn't exist yet) so the user can see what labels are available.
-5. On a hit, print:
+1. Look for `.zi/locate/<label>.md`.
+2. If not found, say so and print `ls .zi/locate/` (or a note that the directory doesn't exist yet) so the user can see what labels are available.
+3. On a hit, print:
 
    ```
    recalled: <label>
@@ -117,11 +116,11 @@ Do not re-verify the pointers unless the user explicitly asks for a refresh.
 
 ### Staleness
 
-Recalled pointers are a snapshot from when the reference was saved. Files may have moved or been renamed since. If the user asks to refresh a recalled reference, re-run the locate using the stored `query:` field and write the new result to a **new** file with a suffixed label (per the collision rule). The old file is left alone.
+Recalled pointers are a snapshot from when the reference was saved. Files may have moved or been renamed since. If the user asks to refresh a recalled reference, re-run the locate using the stored `query:` field and write the new result to a **new** file under `.zi/locate/` with a suffixed label (per the collision rule). The old file is left alone.
 
 ## Constraints
 
 - **Read-only for the target repository.** Never edit repo files, never run builds or tests, never modify repo state.
-- The single write exception is creating/appending files under `~/.claude/locate-refs/` (and `mkdir -p` of that tree).
+- The single write exception is creating files under `.zi/locate/` (and `mkdir -p` of that directory).
 - Keep output terse — the user wants pointers, not prose.
 - Do not fabricate line numbers; they must come from a real tool result.
