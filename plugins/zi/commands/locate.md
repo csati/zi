@@ -1,7 +1,7 @@
 ---
 description: Locate code in the current repository from a natural-language description — return the exact file path, line, enclosing class/module, and symbol. Also recalls a previously-saved locate result by its short label. Use to be *pointed at* code, not to have it explained, edited, or rewritten.
 argument-hint: [description of the code to find, or a saved label to recall]
-allowed-tools: Bash(mkdir:*), Bash(ls:*), Bash(date:*), Read, Grep, Glob, Task, Write
+allowed-tools: Bash(mkdir:*), Bash(ls:*), Bash(date:*), Read, Grep, Glob, Agent, Write
 ---
 
 # locate
@@ -41,7 +41,7 @@ Execute in order, stop as soon as you are confident:
    - Domain terms → likely keywords in identifiers or comments.
 2. **Glob for filenames first** — cheapest and often decisive (e.g. `**/*AuthInterceptor*`).
 3. **Grep for symbols** with `output_mode: "content"` and `-n` so line numbers come back inline. Apply `type:` filters when the language is obvious from the repo (e.g. `type: "kotlin"` in an Android module). Prefer anchored patterns like `class \w*Foo`, `fun \w*validate`, `def \w*reset`.
-4. **Escalate to Explore** if more than ~3 Grep rounds have not narrowed the result. Delegate to the `Explore` subagent (via `Task`) with thoroughness `medium` and pass the original description verbatim.
+4. **Escalate to Explore** if more than ~3 Grep rounds have not narrowed the result. Delegate to the `Explore` subagent (via `Agent`) with thoroughness `medium` and pass the original description verbatim.
 5. **Confirm each candidate** by `Read`ing a small slice (±20 lines) around the hit to verify the semantic match and identify the enclosing class/module and function/method.
 
 Never guess a path you have not verified with a tool. If unsure, say so.

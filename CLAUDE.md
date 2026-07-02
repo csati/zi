@@ -99,9 +99,11 @@ phases of the `prompt → plan` flow:
 Each `plugins/zi/commands/*.md` is frontmatter + a prompt body. Match the existing structure:
 
 - **Frontmatter** — `description` (shown in the picker), `argument-hint`, and `allowed-tools`.
-  `allowed-tools` is a real permission boundary: list only what the command needs, scoped
-  (e.g. `Bash(date:*)`). A command can't use a tool it doesn't declare. (The two git helpers
-  omit `allowed-tools` deliberately — they run plain git through the user's normal permissions.)
+  `allowed-tools` **pre-approves** the listed tools, scoped (e.g. `Bash(date:*)`) — they run
+  without permission prompts while the command is active. It does **not** restrict: unlisted
+  tools stay usable through the user's normal permission flow. List only what the command
+  routinely needs and let everything else prompt. (The two git helpers omit `allowed-tools`
+  deliberately — they run plain git through the user's normal permissions.)
 - **`$ARGUMENTS`** — placeholder the body uses to receive the invocation argument. The
   produce-commands resolve it: if it's a path to an existing file, read it; a path or bare
   `{slug}` naming a `.zi/{slug}/` task directory resolves to the expected file inside it;
@@ -126,7 +128,7 @@ final step repeatable) that must be preserved if you edit it:
 1. **Draft in plan mode** — `EnterPlanMode`, ground in the real codebase with Read/Grep/Glob,
    then write the plan to the **harness plan file** (not yet to `.zi/`). Describe intent and
    target interfaces, never pasted final source.
-2. **Independent verification** — launch **one fresh subagent** (`Task`, a read-only `Explore`
+2. **Independent verification** — launch **one fresh subagent** (`Agent`, a read-only `Explore`
    or an explicitly read-only `general-purpose`) that has **no view of the planning
    conversation**. It receives only the plan-file path and the resolved prompt, and returns a
    **structured findings list** (severity, location, evidence, recommended fix) checking prompt
@@ -142,6 +144,11 @@ final step repeatable) that must be preserved if you edit it:
    the live repo), **exit plan mode** (`ExitPlanMode`, persist `plan.md`, stop), or **run a
    second reviewer** (repeat phases 2–3 with a fresh independent subagent, then ask again). Only
    the *execute now* path writes code, and `plan.md` is still persisted only after `ExitPlanMode`.
+   Before either finishing exit, the command resolves the final `.zi/{slug}/plan.md` path and
+   prepends a self-removing **bootstrap line** to the harness plan file ("write this plan, minus
+   this line, to <path>"), so a plan-mode setting that clears context on approval still gets the
+   plan persisted — the instruction rides inside the approved plan text, the only thing carried
+   into the fresh context. A rejected exit strips the line and returns to the three-way question.
 
 ## Cross-cutting principles encoded in these commands
 
