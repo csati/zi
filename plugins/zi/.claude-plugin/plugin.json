@@ -2,7 +2,7 @@
   "name": "zi",
   "displayName": "ZI — Prompt to Plan",
   "description": "Turn a rough idea into a refined prompt and a verified implementation plan through context-cleared phases (prompt → plan), with an independent subagent verifying the plan, plus an overnight-loop prompt generator, a code locator, and git stage/commit helpers.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "MIT",
   "author": {
     "name": "Norbert Csatari"

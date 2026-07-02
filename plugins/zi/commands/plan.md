@@ -1,7 +1,7 @@
 ---
-description: Turn a prompt (inline or a prompt file) into a verified implementation plan — explore and draft in plan mode, have a fresh subagent independently verify it against the prompt and the codebase, interrogate the findings with the user one at a time, update the plan, and on approval persist it to .zi/{slug}/plan.md. Use for a single quick plan rather than the full prompt→research→prd→decompose pipeline.
+description: Turn a prompt (inline or a prompt file) into a verified implementation plan — explore and draft in plan mode, have a fresh subagent independently verify it against the prompt and the codebase, interrogate the findings with the user one at a time, update the plan, then finish with a three-way choice: execute it now, exit plan mode and persist it to .zi/{slug}/plan.md, or run another independent reviewer and repeat. Use for a single quick plan rather than the full prompt→research→prd→decompose pipeline.
 argument-hint: [prompt file path / task-directory reference, or the problem statement text itself]
-allowed-tools: Bash(date:*), Read, Grep, Glob, Task, AskUserQuestion, EnterPlanMode, ExitPlanMode, Write, Edit
+allowed-tools: Bash, Read, Grep, Glob, Task, AskUserQuestion, EnterPlanMode, ExitPlanMode, Write, Edit
 ---
 
 # Verified Plan
@@ -11,7 +11,8 @@ allowed-tools: Bash(date:*), Read, Grep, Glob, Task, AskUserQuestion, EnterPlanM
 Turn a prompt — inline text or a prompt file — into a **verified** implementation plan. Draft
 the plan in plan mode, have a **fresh, independent subagent** verify it against the prompt and
 the actual codebase, interrogate every finding with the user one at a time, update the plan,
-and — only on approval — persist it to `.zi/{slug}/plan.md`. This is a standalone quick
+then finish with a **three-way choice** — execute it now, exit plan mode and persist it to
+`.zi/{slug}/plan.md`, or run another independent reviewer and repeat. This is a standalone quick
 planner, not a step in the prompt→research→prd→decompose pipeline.
 
 ## Operating rules
@@ -25,10 +26,12 @@ planner, not a step in the prompt→research→prd→decompose pipeline.
   self-review in its place.
 - **Report vs. fix is a hard line.** The subagent only *reports* findings; fixes are applied
   only after the user resolves each one.
-- **Plan only — never implement.** On approval this command persists the plan file and stops.
-  Writing code is a separate, later step the user initiates.
+- **Never implement unasked.** The command plans and verifies; it writes code only when the
+  user picks **Execute now** at the final Phase 4 choice. On **Exit plan mode** it persists the
+  plan and stops. It never begins implementing on its own.
 - **Never persist early or "just in case."** The `.zi/{slug}/plan.md` artifact is written only
-  after the Phase 4 approval gate opens.
+  after `ExitPlanMode` on Phase 4's **Execute now** or **Exit plan mode** branch — never during
+  drafting or a second-reviewer round.
 
 ## Input
 
@@ -130,46 +133,73 @@ batch:
 Surface, resolve, and apply **one** finding before raising the next. If the subagent found
 nothing, say so plainly and proceed.
 
-### Phase 4 — Approve, then persist
+### Phase 4 — Choose the next step (repeatable)
 
-1. Once every finding is resolved and the plan is fully updated, call `ExitPlanMode` to present
-   the verified plan for approval. Include any `allowedPrompts` the plan's implementation will
-   need (e.g. "run tests", "install dependencies").
-2. **After approval** (plan mode exits, so `Write` is now permitted), persist the final plan to
-   `.zi/{slug}/plan.md`:
-   - **If the prompt came from a file inside an existing `.zi/{slug}/` directory** — write
-     `plan.md` as a **sibling** in that same directory, so it stays paired with its source.
-   - **Otherwise** (inline text, or a file outside `.zi/`) — create a fresh task directory.
-     Capture a fresh timestamp at write time:
+Once every finding from the **latest** verification round is resolved and the plan is fully
+updated, do **not** exit plan mode automatically. Present a single `AskUserQuestion` with
+exactly three choices and act on the answer:
 
-     !`date +%Y%m%d-%H%M%S`
+1. **Execute now** — implement the finished plan in this same context. Call `ExitPlanMode` to
+   leave plan mode (include any `allowedPrompts` the implementation needs, e.g. "run tests",
+   "install dependencies"), persist the plan per the **Persistence** rules below, then implement
+   it against the live repo: make the edits and verify with the project's real build / test /
+   lint commands. This is the **only** path on which this command writes code.
+2. **Exit plan mode** — call `ExitPlanMode` to present the finished plan for approval and hand
+   control back, persist the plan per the **Persistence** rules below, and **stop** — do not
+   implement. Whether the harness clears context on exit is the **user's own plan-mode setting**;
+   respect whatever it does — this command neither forces nor prevents it.
+3. **Run a second reviewer** — stay in plan mode and repeat **Phases 2–3** with a brand-new,
+   independent subagent: fresh verification of the *current* plan, then interrogate its findings
+   one at a time and apply each, exactly as with the first reviewer. When that round finishes,
+   return to **this** three-way question. The user may request as many review rounds as they
+   want before executing or exiting.
 
-     Use the value produced above (re-run it yourself if the embedded value looks stale).
-     Derive a **1–4 word** kebab-case `{description}` slug that identifies the task (e.g.
-     `auth-token-refresh`, `csv-export`), create `.zi/{YYYYMMDD-HHmmss}-{description}/` (and
-     `.zi/` itself) if it does not yet exist, and write `plan.md` inside it.
-3. Tell the user the exact path you wrote (including the `.zi/{slug}/` prefix). After
-   reporting the path, also print — on its own line — a fenced code block whose sole content
-   is a bare file-mention of the plan you just wrote, with the **actual** resolved path (never
-   the literal `{slug}`), so it can be copy-pasted in one tap to start an implementation
-   session (e.g. from the Android Claude app over a remote-control session):
+Carry all three as explicit options every time; never pick for the user. It is fair to note that
+**Execute now** saves the tokens a fresh context would spend re-grounding when context usage is
+low — but the choice is always theirs.
 
-   ```
-   @.zi/20260101-000000-example/plan.md
-   ```
+#### Persistence (Execute now and Exit plan mode)
 
-   Do **not** start implementing.
+`ExitPlanMode` has left plan mode, so `Write` is now permitted. Persist the final plan to
+`.zi/{slug}/plan.md`:
+
+- **If the prompt came from a file inside an existing `.zi/{slug}/` directory** — write
+  `plan.md` as a **sibling** in that same directory, so it stays paired with its source.
+- **Otherwise** (inline text, or a file outside `.zi/`) — create a fresh task directory. Capture
+  a fresh timestamp at write time:
+
+  !`date +%Y%m%d-%H%M%S`
+
+  Use the value produced above (re-run it yourself if the embedded value looks stale). Derive a
+  **1–4 word** kebab-case `{description}` slug that identifies the task (e.g.
+  `auth-token-refresh`, `csv-export`), create `.zi/{YYYYMMDD-HHmmss}-{description}/` (and `.zi/`
+  itself) if it does not yet exist, and write `plan.md` inside it.
+
+Then tell the user the exact path you wrote (including the `.zi/{slug}/` prefix) and print — on
+its own line — a fenced code block whose sole content is a bare file-mention of the plan you
+just wrote, with the **actual** resolved path (never the literal `{slug}`), so it can be
+copy-pasted in one tap to start an implementation session (e.g. from the Android Claude app over
+a remote-control session):
+
+```
+@.zi/20260101-000000-example/plan.md
+```
+
+On **Exit plan mode**, stop here. On **Execute now**, go on to implement the plan.
 
 ## Guardrails
 
 - **Plan mode first.** `EnterPlanMode` is the first action after the prompt is resolved; no
   codebase Read/Grep/Glob happens before it. Resolution itself only reads the prompt file.
-- **Never persist early.** The `.zi/{slug}/plan.md` artifact is written only after the Phase 4
-  approval gate — never "just in case."
-- **Independence is mandatory.** The verifier is a fresh subagent with no view of this
-  conversation, not a self-review pass.
-- **One finding at a time.** Resolve and apply each before raising the next; never present them
-  as a batch, and never silently pick an interpretation — ask.
+- **Never persist early.** The `.zi/{slug}/plan.md` artifact is written only after `ExitPlanMode`
+  on Phase 4's **Execute now** or **Exit plan mode** branch — never "just in case," and never
+  during a second-reviewer round.
+- **Independence is mandatory.** Every verifier — the first and each **Run a second reviewer**
+  round — is a fresh subagent with no view of this conversation, not a self-review pass.
+- **One finding at a time.** In every review round, resolve and apply each finding before raising
+  the next; never present them as a batch, and never silently pick an interpretation — ask.
 - **Ground every claim; specify intent, not source.** Describe what to build and the target
   interfaces; do not paste final code into the plan.
-- **Plan only — never implement.** On approval, persist and stop.
+- **Implementation is opt-in and final.** The command writes code only on the explicit
+  **Execute now** choice at Phase 4; **Exit plan mode** persists and stops; **Run a second
+  reviewer** loops. It never starts implementing on its own.
