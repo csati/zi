@@ -1,10 +1,12 @@
 # ZI — prompt-to-plan planning helper
 
 A Claude Code plugin that turns a rough idea into a verified implementation plan through two
-context-cleared phases, each producing a reviewable artifact that feeds the next:
+context-cleared phases, each producing a reviewable artifact that feeds the next — plus a
+one-shot `task` command that runs both phases and the implementation for you:
 
 ```
-prompt → plan → (you implement)
+prompt → plan → (you implement)        # /zi:prompt, /zi:plan
+prompt → plan → execute → commit       # /zi:task, one shot
 ```
 
 Every artifact for one feature lives together in a per-task directory `.zi/{ts}-{desc}/`
@@ -13,12 +15,13 @@ finds the first automatically (`prompt.md` → `plan.md`).
 
 ## The commands
 
-The plugin ships six slash commands — two planning phases, a standalone overnight-loop generator, two git helpers, and a code locator:
+The plugin ships seven slash commands — two planning phases, a one-shot pipeline, a standalone overnight-loop generator, two git helpers, and a code locator:
 
 | Command | Reads | Produces | Role |
 |---------|-------|----------|------|
 | `/zi:prompt <desc>` | a rough idea | `.zi/{slug}/prompt.md` | interrogate intent, surface flaws, save a refined prompt |
 | `/zi:plan <prompt>` | `.zi/{slug}/prompt.md` or inline text | `.zi/{slug}/plan.md` | draft a plan, independently verify it, persist on approval |
+| `/zi:task <idea>` | a rough idea, or a `.zi/{slug}` dir to resume | `prompt.md`, `findings.md`, `plan.md` + a commit | run prompt → plan → execute in fresh subagents, relay their questions to you, commit on pass |
 | `/zi:overnight <goal>` | a loop GOAL | `.zi/{slug}/overnight.md` | interrogate the goal, generate an unattended never-halt loop-orchestration prompt |
 | `/zi:stage <desc>` | your description | staged files | stage files for commit from a natural-language description |
 | `/zi:commit` | staged changes | a commit | commit staged changes with a terse single-line message |
@@ -27,8 +30,10 @@ The plugin ships six slash commands — two planning phases, a standalone overni
 **Clear context between phases.** Each phase's quality comes from a clean context that sees
 only the prior artifact. Both planning phases are interactive — you run them, answer their
 questions, and approve their output. After `plan` writes `plan.md`, **you implement the code
-yourself** — the plugin stops at the verified plan; there is no automated, self-committing
-back-half.
+yourself** — the `prompt → plan` flow stops at the verified plan. **`/zi:task` is the deliberate
+exception**: it is the one command with a self-committing back half — it runs the same stages
+one-shot and finishes by implementing the plan and committing on the current branch (never
+pushing).
 
 ### `/zi:prompt` — refine the idea
 
@@ -49,6 +54,30 @@ and verifiability — and returns a structured findings list. You work those fin
 time**, deciding each resolution, and the plan is updated as you go. Only after you approve does
 it persist the verified plan to `.zi/{slug}/plan.md` — paired as a sibling of its source
 prompt — and stop. Implementing the plan is a separate step you initiate.
+
+### `/zi:task` — the whole pipeline in one shot
+
+Give it a rough idea and it runs the prompt, plan and execute stages **each in a fresh
+subagent**, passing nothing between them but `.zi/{slug}/…` paths. Subagents can't ask you
+questions directly, so every question a stage raises — the prompt interrogation, the risk
+batches, each verification finding, an open decision during implementation — is **relayed** to
+you as a normal `AskUserQuestion` and your answer is sent back to the same agent; nothing else
+in the pipeline needs you. The plan is drafted to `plan.draft.md`, independently verified by a
+read-only subagent that writes `findings.md`, and becomes `plan.md` once the last finding is
+resolved. There is no gate after the prompt stage and exactly one verification pass: as soon
+as `plan.md` exists the execute agent implements it, runs the plan's verification commands, and
+on pass **commits the implementation paths on the current branch** (never `.zi/` artifacts,
+never a push) with a terse single-line message. On failure exactly one fix agent gets the plan,
+the failing command and the changed paths; if it can't make verification pass the work is
+staged, not committed, and you're told which command failed.
+
+Pass a `.zi/{slug}` directory (or bare slug) instead of an idea to **resume** at the first
+missing artifact: `prompt.md` only → planning; a lone `plan.draft.md` → re-verify; `plan.md` →
+execution; an empty directory → it asks for the idea. **Start `/zi:task` from a fresh
+session** — the orchestrator's context should hold nothing but the run.
+
+`/zi:prompt`, `/zi:plan` and `/zi:task` all read the same stage text from `plugins/zi/stages/`,
+so the interactive commands and the pipeline cannot drift apart.
 
 ### `/zi:overnight` — generate an overnight loop prompt
 
@@ -96,7 +125,11 @@ to `marketplace.json`, which downloads only the catalog and none of the plugin f
 
 Validate first if you like: `/plugin validate /path/to/zi`.
 
-Editing the command `.md` files under `plugins/zi/commands/` is picked up live. If you change
+With a marketplace added from a local directory, the plugin is loaded from that directory:
+edits and new files under `plugins/zi/` reach the next session (or the current one after
+`/reload-plugins`) with no reinstall. Git-hosted installs run from a copy under
+`~/.claude/plugins/cache/` and pick up changes via `/plugin marketplace update` +
+`/plugin update zi@ncs-plugins` — bump `version` in `plugin.json` when shipping. If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## Contents
@@ -106,7 +139,8 @@ zi/                                   ← repo root = the "ncs-plugins" marketpl
 ├── .claude-plugin/marketplace.json    ← the catalog (lists the zi plugin)
 ├── plugins/zi/                       ← the plugin itself
 │   ├── .claude-plugin/plugin.json
-│   └── commands/   prompt, plan, overnight, stage, commit, locate
+│   ├── commands/   prompt, plan, task, overnight, stage, commit, locate
+│   └── stages/     prompt, plan, execute   ← shared stage text read by prompt, plan and task
 ├── README.md
 ├── CLAUDE.md
 └── LICENSE
@@ -116,8 +150,10 @@ After install, commands are namespaced **`/zi:<command>`** (e.g. `/zi:prompt`).
 
 ## Caveats
 
-- **Plan, don't implement.** `/zi:plan` stops at a verified, approved `plan.md`; writing and
-  committing the code is a separate step you drive yourself.
+- **Plan, don't implement — except `/zi:task`.** `/zi:plan` stops at a verified, approved
+  `plan.md`; writing and committing the code is a separate step you drive yourself. `/zi:task`
+  is the deliberate exception: it implements the plan and commits on the current branch (never
+  pushes), so invoke it only when that is what you want.
 - **Independence is the point.** `/zi:plan`'s verification runs in a fresh subagent with no
   view of the planning conversation — it reports findings, it never silently rewrites the plan.
 - **`stage`, `commit`, and `locate`** are general-purpose helpers bundled alongside the planning

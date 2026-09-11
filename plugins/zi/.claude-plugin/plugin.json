@@ -1,11 +1,11 @@
 {
   "name": "zi",
-  "displayName": "ZI — Prompt to Plan",
-  "description": "Turn a rough idea into a refined prompt and a verified implementation plan through context-cleared phases (prompt → plan), with an independent subagent verifying the plan, plus an overnight-loop prompt generator, a code locator, and git stage/commit helpers.",
-  "version": "1.1.0",
+  "displayName": "ZI — Prompt to Plan to Execute",
+  "description": "Turn a rough idea into a refined prompt and a verified implementation plan through context-cleared phases (prompt → plan), with an independent subagent verifying the plan; or run the whole prompt → plan → execute pipeline one-shot with /zi:task, which relays stage questions to you and commits on pass. Plus an overnight-loop prompt generator, a code locator, and git stage/commit helpers.",
+  "version": "1.2.0",
   "license": "MIT",
   "author": {
     "name": "Norbert Csatari"
   },
-  "keywords": ["planning", "prompt", "plan", "spec-driven", "locate", "git"]
+  "keywords": ["planning", "prompt", "plan", "task", "pipeline", "spec-driven", "locate", "git"]
 }
