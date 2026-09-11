@@ -6,11 +6,13 @@ orchestrator) loads it and binds the seam below before it runs.
 ## Seams
 
 The host binds these before the stage runs; if a seam you need is unbound, stop and ask the
-host — never improvise a binding.
+host — never improvise a binding. AUTONOMY is the one seam with a documented default, so it
+never needs asking about: unbound means none.
 
 | Seam | Meaning |
 |---|---|
 | ASK | how to put a decision to the user and get the answer back |
+| AUTONOMY | which decisions the agent may resolve itself instead of via ASK. **Default when unbound: none — always ASK.** |
 
 ## Input contract
 
@@ -29,8 +31,11 @@ The host hands you:
 - **Ground in the live repo** with Read/Grep/Glob before touching a file; the plan names
   target interfaces, the code is the source of truth for how they fit.
 - **Implement exactly the plan** — no more, no less. Where the plan leaves a real decision
-  open, resolve it via ASK. **A guessed decision is a failure; ASK is the only way to resolve
-  one.** Do not ask what the plan or the code already answers.
+  open, resolve it via ASK.
+  **A guessed decision is a failure; ASK is the only way to resolve one, except a decision AUTONOMY lets you resolve yourself.**
+  The exemption never covers intent. Every decision you resolve yourself under AUTONOMY MUST be
+  recorded — for this stage the record is the **commit body** (see the git rules below), not
+  `plan.md`. Do not ask what the plan or the code already answers.
 - **Git rules** (self-contained restatement of the plugin's commit conventions):
   - Never push.
   - Never `--amend`, never `-a`, never `--no-verify`.
@@ -39,9 +44,12 @@ The host hands you:
     `.zi/` — `prompt.md`, `findings.md`, `plan.md` and their siblings are left for the user to
     commit or ignore.
   - Commit on the **current branch**; never create or switch branches.
-  - Commit message: **single line, single sentence**, imperative mood ("Add X", "Fix Y"),
-    terse — prefer brevity over clarity, under 50 characters when possible; no body, no
-    trailers, no Co-Authored-By, no attribution. Commit with `git commit -m "<message>"`.
+  - Commit message: the **subject** is a single terse imperative sentence ("Add X", "Fix Y") —
+    prefer brevity over clarity, under 50 characters when possible. A **body** is permitted
+    **only** when auto-decisions exist, and then consists solely of the
+    `Decided (auto): <choice> — <reason>` lines, one per line; still no trailers, no
+    Co-Authored-By, no attribution. Commit with `git commit -m "<subject>"`, adding a second
+    `-m "<body>"` only when a body exists.
   - If the pre-commit hook fails, fix the issue and create a new commit; never bypass the hook.
 - **Reports carry paths, the command, and one-line status only** — never file bodies, diffs,
   or logs.
@@ -66,6 +74,9 @@ You receive the plan, the failing command, and the changed paths of the previous
 2. **Fix only if the cause seems clear.** Then re-run the plan's verification commands.
 3. **On pass**: `git add` by name the union of the received changed paths and every path you
    touched, commit per the git rules above, and report done with `RESULT: pass <commit hash>`.
+   A fix-mode commit body lists only your **own auto-decisions**; auto-decisions made by the
+   failed implement attempt are not carried across (the DONE payload has no field for them)
+   and are accepted as lost.
 4. **If the cause is unclear, or verification still fails**: `git add` by name the **union**
    of the received changed paths and every path you yourself touched — **stage, do not
    commit** — and report done with `RESULT: fail`, `COMMAND: <the failing command, verbatim>`

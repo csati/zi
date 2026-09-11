@@ -27,6 +27,7 @@ user has explicit feedback on exactly what is being refined.
 | Seam | Binding in this command |
 |---|---|
 | ASK | `AskUserQuestion`. Phase 1: exactly **one question per call, asked sequentially**, never batched into one call; the tool's free-text "Other" path is the free-text path. Phase 2: **batched** calls of up to the tool's 4-question max, multiple sequential calls of ≤4 when more risks exist. |
+| AUTONOMY | **none** — every decision goes through ASK; interactive behaviour is unchanged. |
 | TIMESTAMP | the value below, captured when the command was invoked (only if it is missing, run `date +%Y%m%d-%H%M%S` yourself): |
 
 !`date +%Y%m%d-%H%M%S`

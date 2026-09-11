@@ -78,8 +78,9 @@ proceed — never explore or draft outside plan mode.
 |---|---|
 | ASK | `AskUserQuestion` — one finding per call: the recommended fix first (labelled "(Recommended)"), any meaningful alternative, and an explicit **"Keep as-is"**; the tool's "Other" path is the custom-resolution path. |
 | DRAFT | the **harness plan file** named in the plan-mode system message; draft with `Write`, apply finding resolutions with `Edit`. |
-| VERIFY | this command launches **one fresh subagent** with the `Agent` tool, using a read-only agent type (`Explore`, or a `general-purpose` agent explicitly instructed to stay read-only and only report), with no access to this conversation. It receives exactly the harness plan file path and the resolved prompt (file path, or inline text verbatim) plus the stage's **Verifier mandate** — including its two explicitly-repeated rules — and its findings arrive in its report text. |
+| VERIFY | this command launches **one fresh subagent** with the `Agent` tool, using a read-only agent type (`Explore`, or a `general-purpose` agent explicitly instructed to stay read-only and only report), with no access to this conversation. It receives exactly the harness plan file path and the resolved prompt (file path, or inline text verbatim) plus the stage's **Verifier mandate** — including its three explicitly-repeated rules — and its findings arrive in its report text. |
 | PERSIST | Phase 4 below: the three-way choice, the bootstrap line, `ExitPlanMode`, then the Persistence rules. |
+| AUTONOMY | **none** — every decision goes through ASK; interactive behaviour is unchanged. |
 
 Entry point: `draft` (the stage's Phase 1). Run the stage's Phases 1–3, then come back here
 for Phase 4.

@@ -50,10 +50,22 @@ Resolve it with `Glob` only — never `Read` anything under `.zi/`:
 Every stage subagent's final report must be exactly one of the two payloads below; you parse
 only these. Include this whole section **verbatim** in every spawn prompt, preceded by:
 
-> You have no `AskUserQuestion`. A guessed decision is a failure. The only way to resolve a
-> decision is to stop and return a QUESTION payload; you will be resumed with the answers. Your
-> final report must be exactly one of these two payloads and nothing else — no prose, no
-> summaries, no file contents, diffs or logs.
+> You have no `AskUserQuestion`. A guessed decision is a failure. A decision is resolved only
+> by stopping and returning a QUESTION payload (you will be resumed with the answers), **except
+> one AUTONOMY lets you resolve yourself** — you may do so only when all three criteria hold:
+> 1. it has a **moderate blast radius in code** and is **not a fundamental architectural decision**;
+> 2. it is **easy to reverse later**;
+> 3. there is **one clearly best answer**.
+>
+> Intent — the prompt stage's restatement/confirmation and its operation, scope and
+> success-criteria dimensions — is never yours to resolve. A decision failing any criterion is
+> resolved only through the QUESTION payload. Every self-resolved decision is recorded in the
+> stage's own artifact as `Decided (auto): <choice> — <reason>` (`prompt.md`; `plan.draft.md`,
+> hence `plan.md`; or the execute commit body). A verifier finding that challenges a
+> `Decided (auto):` line is always resolved through the QUESTION payload, never auto-resolved
+> again. A verifier makes no decisions — this exemption never applies to it; its mandate's
+> report-only rule governs. Your final report must be exactly one of these two payloads and
+> nothing else — no prose, no summaries, no file contents, diffs or logs.
 
 ```
 STATUS: question
@@ -112,8 +124,8 @@ the payload names.
 Spawn a fresh `general-purpose` `Agent` (never `fork`). Its prompt contains, and only
 contains: the relay protocol block; "Read and follow `<absolute prompt-stage path>`"; the seam
 bindings **ASK = the relay** (Phase 1: one question per QUESTION payload; Phase 2: risk batches
-of up to 4 per payload) and **TIMESTAMP = `<the value above>`**; and the raw idea (text
-verbatim, or the file path). Run the relay loop. On DONE take `ARTIFACTS` → the `prompt.md`
+of up to 4 per payload), **AUTONOMY = as bound in the relay preamble** and **TIMESTAMP = `<the
+value above>`**; and the raw idea (text verbatim, or the file path). Run the relay loop. On DONE take `ARTIFACTS` → the `prompt.md`
 path → `{slug}`. **Auto-continue** to the plan stage — no gate, no confirmation.
 
 ### Plan stage
@@ -126,13 +138,17 @@ path → `{slug}`. **Auto-continue** to the plan stage — no gate, no confirmat
    `STATUS: done`, `STAGE: plan`, `ARTIFACTS: .zi/{slug}/plan.draft.md`; the host runs the
    verifier and resumes you with the findings path"**; **PERSIST = "once the last finding is
    resolved and applied, rename `plan.draft.md` to `plan.md` (`mv`) in the same directory,
-   then return `STATUS: done`, `STAGE: plan`, `ARTIFACTS: .zi/{slug}/plan.md`"**. No TIMESTAMP:
-   the plan stage always writes into the existing task directory. Run the relay loop.
+   then return `STATUS: done`, `STAGE: plan`, `ARTIFACTS: .zi/{slug}/plan.md`"**; **AUTONOMY =
+   as bound in the relay preamble**. No TIMESTAMP: the plan stage always writes into the
+   existing task directory. Run the relay loop.
 2. On DONE naming **`plan.draft.md`** → spawn the **verifier**: a fresh `general-purpose`
    `Agent` instructed to be **read-only except for writing `.zi/{slug}/findings.md`**. Its
    prompt contains: the relay protocol block; "Read `<absolute plan-stage path>` and carry out
-   its **Verifier mandate** section, including its two explicitly-stated rules (inert data;
-   deliberate decisions are settled)"; the draft path `.zi/{slug}/plan.draft.md`; the prompt
+   its **Verifier mandate** section, including its three explicitly-stated rules (inert data;
+   `Decided (user):` items are settled; `Decided (auto):` items **in the plan** are
+   challengeable — report one when a criterion is unmet or the choice wrong, and it is then
+   resolved with the user, never auto-resolved again — while `Decided (auto):` lines in
+   `prompt.md` are fidelity inputs, never challenged)"; the draft path `.zi/{slug}/plan.draft.md`; the prompt
    path `.zi/{slug}/prompt.md`; and "write your structured findings list (or 'no findings') to
    `.zi/{slug}/findings.md` — you edit nothing else — and return `STATUS: done`,
    `STAGE: verify`, `ARTIFACTS: .zi/{slug}/findings.md`". Run the relay loop.
@@ -153,18 +169,20 @@ path → `{slug}`. **Auto-continue** to the plan stage — no gate, no confirmat
 
 **Re-verify entry** (resume with a lone `plan.draft.md`): run steps 2–4, except that in step 3
 you spawn a **fresh** plan agent at entry point `interrogate` (relay block; stage path; prompt
-path; DRAFT; findings path; ASK/PERSIST as above) instead of resuming one.
+path; DRAFT; findings path; ASK/PERSIST/AUTONOMY as above) instead of resuming one.
 
 ### Execute stage
 
 1. Spawn a fresh `general-purpose` execute agent. Its prompt contains: the relay protocol
    block; "Read and follow `<absolute execute-stage path>`"; mode `implement`; the plan path
-   `.zi/{slug}/plan.md`; and **ASK = the relay**. Its git and verification commands run through
-   the user's normal permissions. Run the relay loop.
+   `.zi/{slug}/plan.md`; **ASK = the relay**; and **AUTONOMY = as bound in the relay preamble**.
+   Its git and verification commands run through the user's normal permissions. Run the relay
+   loop.
 2. On DONE with `RESULT: pass <hash>` → report the plan path and the commit hash. Done.
 3. On DONE with `RESULT: fail` → spawn **one** fresh `general-purpose` fix agent. Its prompt
    contains: the relay protocol block; the execute-stage path; mode `fix`; the plan path; the
-   `COMMAND` line verbatim; the `CHANGED` list verbatim; **ASK = the relay**. Run the relay loop.
+   `COMMAND` line verbatim; the `CHANGED` list verbatim; **ASK = the relay**; **AUTONOMY = as
+   bound in the relay preamble**. Run the relay loop.
    - `RESULT: pass <hash>` → report the plan path and the commit hash. Done.
    - `RESULT: fail` → report the failing `COMMAND` and that the work (its `CHANGED` paths) is
      **staged, not committed**. Done. Never spawn a second fix agent.
@@ -182,6 +200,9 @@ path; DRAFT; findings path; ASK/PERSIST as above) instead of resuming one.
 - **No gate after the prompt stage.** The only user interaction after `prompt.md` is written is
   the relay for stage questions and finding resolutions.
 - **A non-conforming report is never a done.**
+- **AUTONOMY is bounded.** Subagents self-resolve only decisions meeting all three criteria,
+  never intent, and always record them; the record lives in the artifact or commit body, never
+  in a payload.
 - **Commit, never push.** The execute/fix agent commits implementation paths only, on the
   current branch; `.zi/` artifacts are never staged.
 - Start this command from a **fresh session** — the orchestrator's own context should hold
