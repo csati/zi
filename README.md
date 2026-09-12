@@ -21,7 +21,7 @@ The plugin ships seven slash commands — two planning phases, a one-shot pipeli
 |---------|-------|----------|------|
 | `/zi:prompt <desc>` | a rough idea | `.zi/{slug}/prompt.md` | interrogate intent, surface flaws, save a refined prompt |
 | `/zi:plan <prompt>` | `.zi/{slug}/prompt.md` or inline text | `.zi/{slug}/plan.md` | draft a plan, independently verify it, persist on approval |
-| `/zi:task <idea>` | a rough idea, or a `.zi/{slug}` dir to resume | `prompt.md`, `findings.md`, `plan.md` + a commit | run prompt → plan → execute in fresh subagents, relay their questions to you, commit on pass |
+| `/zi:task <idea>` | a rough idea, or a `.zi/{slug}` dir to resume | `prompt.md`, `findings.md`, `plan.md` + a commit — or, for oversized work, `phase-NN/` directories each with those three files, a commit and a `commit` marker | run prompt → plan → execute in fresh subagents, relay their questions to you, commit on pass |
 | `/zi:overnight <goal>` | a loop GOAL | `.zi/{slug}/overnight.md` | interrogate the goal, generate an unattended never-halt loop-orchestration prompt |
 | `/zi:stage <desc>` | your description | staged files | stage files for commit from a natural-language description |
 | `/zi:commit` | staged changes | a commit | commit staged changes with a terse single-line message |
@@ -71,10 +71,24 @@ never a push) with a terse single-line message. On failure exactly one fix agent
 the failing command and the changed paths; if it can't make verification pass the work is
 staged, not committed, and you're told which command failed.
 
+**Big jobs are split into phases.** While it grounds the idea, the prompt stage estimates how
+much context the implementation will need (the size of every file it must read or change,
+converted to tokens, times three for tool output, tests and iteration). If the total exceeds
+200K tokens the work is cut into ordered, self-contained phases of at most 100K each, and you
+are asked to **confirm the phase list** — one line per phase with its scope and estimate — before
+anything is written. Each phase then gets its own `.zi/{slug}/phase-NN/prompt.md` (instead of a
+top-level `prompt.md`) and is planned, verified, executed and **committed on its own, one phase
+after another**, with a `phase-NN/commit` marker recording each hash. If a phase fails after its
+one fix attempt the run **halts**: later phases never start, earlier commits stay on the branch,
+and the failing phase's work is left staged. Smaller jobs are untouched by this — a single
+`prompt.md`, one chain, one commit — and `/zi:prompt` never estimates or phases anything.
+
 Pass a `.zi/{slug}` directory (or bare slug) instead of an idea to **resume** at the first
 missing artifact: `prompt.md` only → planning; a lone `plan.draft.md` → re-verify; `plan.md` →
-execution; an empty directory → it asks for the idea. **Start `/zi:task` from a fresh
-session** — the orchestrator's context should hold nothing but the run.
+execution; an empty directory → it asks for the idea. A phased task resumes at the lowest
+`phase-NN/` without a `commit` marker and applies the same rules inside it, then carries on with
+the later phases. **Start `/zi:task` from a fresh session** — the orchestrator's context should
+hold nothing but the run.
 
 `/zi:prompt`, `/zi:plan` and `/zi:task` all read the same stage text from `plugins/zi/stages/`,
 so the interactive commands and the pipeline cannot drift apart.

@@ -46,7 +46,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.3.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.4.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## The core architecture: a directory-per-task, context-cleared flow
@@ -83,7 +83,7 @@ an artifact out of its task directory breaks how the next phase locates its inpu
 |---|---|---|---|
 | `/zi:prompt` | a rough idea | `{slug}/prompt.md` | interrogate intent, surface flaws/side effects, save refined prompt |
 | `/zi:plan` | `{slug}/prompt.md`, a task-dir reference, or inline text | `{slug}/plan.md` | draft a plan, independently verify it (repeatable), then by user choice execute it, exit & persist, or re-review |
-| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, a commit | one-shot prompt → plan → execute, each stage in a fresh subagent, questions relayed to the user; commits on the current branch |
+| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, a commit — or, when phased, `{slug}/phase-NN/{prompt,findings,plan}.md` + `{slug}/phase-NN/commit` per phase | one-shot prompt → plan → execute, each stage in a fresh subagent, questions relayed to the user; commits on the current branch — one chain and one commit per phase when the estimate exceeds 200K |
 
 Note: `plan.md`'s frontmatter `description` contrasts itself with a fuller
 `prompt→research→prd→decompose` pipeline. That larger pipeline is **aspirational/comparative
@@ -145,18 +145,45 @@ on failure exactly one fix agent gets the plan, the failing command and the chan
 the first missing artifact (`prompt.md` → plan; `plan.draft.md` alone → re-verify; `plan.md` →
 execute; empty → ask for the idea). Start it from a fresh session.
 
+**Phasing.** The prompt stage has a **PHASING** seam (default when unbound: **off** — always a
+single `prompt.md`). `/zi:prompt` binds it off, so its output is unchanged; only `/zi:task`
+binds it **on**. Under PHASING on the stage estimates the execute-context cost during grounding
+— the byte sizes of every file the implementation must read or modify, summed once per file, ÷4
+bytes per token, ×3 overhead for tool output, tests and iteration (re-summed once at the Phase-3
+gate if interrogation changed the file set) — and records it as a fixed-form `Estimate:` line.
+A total ≤200K tokens stays flat. A total >200K is partitioned into ordered, self-contained
+phases of ≤100K each (an uncuttable oversized phase is raised as a Phase-2 risk); the phase list
+(`phase-NN: <scope> (~<N>K)` per line plus the total) is **confirmed with the user via ASK** — it
+is the cross-phase coverage check, since each phase's verifier sees only its own prompt — and
+only then are the `.zi/{slug}/phase-NN/prompt.md` files written (no top-level `prompt.md`; each
+names its phase N of M, states what earlier phases are assumed to have landed, and restates the
+decision lines that constrain it). The orchestrator reads the multi-path `ARTIFACTS` line, sorts
+the `phase-NN` directories, and runs the unchanged plan → verify → interrogate → execute (+fix)
+chain **once per phase in order** with every artifact path rewritten to `phase-NN/…` and fresh
+agents per phase; each phase commits on its own, after which the orchestrator writes the
+one-line marker `.zi/{slug}/phase-NN/commit` holding the hash — the only file it ever writes,
+checked by `Glob` presence only. A phase's final failure **halts** the run (later phases never
+start; earlier commits stay; work is staged, not committed). Resuming a phased `.zi/{slug}`
+picks the lowest-numbered phase without `commit` and applies the per-artifact rules inside it;
+all phases marked → the task is reported complete; a phase directory lacking `prompt.md` is
+reported as malformed, never routed to "ask for the idea". The thresholds live in the stage
+text; the host binds only on/off. `stages/plan.md`, `stages/execute.md` and `commands/plan.md`
+know nothing about phases.
+
 **Seams.** Stage texts are written against named seams the host binds: **ASK** (how to ask the
 user), **TIMESTAMP** (the invocation `date` value — inline `` !`date` `` does not resolve for
 subagents), and for the plan stage **DRAFT** (where the plan is drafted), **VERIFY** (who
 launches the verifier and how findings come back) and **PERSIST** (how `plan.md` is finalised),
 plus **AUTONOMY** in every stage (which decisions the agent may resolve itself instead of via
-ASK; the one seam with a default — unbound = none, always ASK — so an older host keeps the
-always-ask behaviour). The `/zi:prompt` / `/zi:plan` wrappers bind ASK = `AskUserQuestion`,
+ASK; a seam with a default — unbound = none, always ASK — so an older host keeps the
+always-ask behaviour) and, for the prompt stage only, **PHASING** (whether an oversized
+implementation is split into phase prompts; the other defaulted seam — unbound = off). The
+`/zi:prompt` / `/zi:plan` wrappers bind ASK = `AskUserQuestion`,
 DRAFT = the harness plan file, VERIFY = the wrapper launches the `Agent` verifier, PERSIST =
-the Phase 4 three-way choice + bootstrap line + `ExitPlanMode`, AUTONOMY = none; the
-orchestrator binds ASK = the relay, DRAFT = `.zi/{slug}/plan.draft.md`, VERIFY = an
+the Phase 4 three-way choice + bootstrap line + `ExitPlanMode`, AUTONOMY = none, PHASING = off;
+the orchestrator binds ASK = the relay, DRAFT = `.zi/{slug}/plan.draft.md`, VERIFY = an
 orchestrator-spawned verifier writing `findings.md`, PERSIST = rename to `plan.md`, AUTONOMY =
-the three criteria stated in the relay preamble. Each stage file opens with a Seams table; keep
+the three criteria stated in the relay preamble, PHASING = on. Each stage file opens with a Seams table; keep
 it in sync when a host's binding changes. When editing a stage file remember it has **two hosts** — a change
 must hold for the interactive wrapper and for a relay-driven subagent alike.
 

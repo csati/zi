@@ -1,5 +1,5 @@
 ---
-description: One-shot prompt → plan → execute pipeline. Runs the prompt, plan and execute stages each in a fresh subagent, relays every stage question to you, persists .zi/{slug}/prompt.md, findings.md and plan.md, then implements the plan and commits on the current branch (never pushes). Resumes a .zi/{slug} task directory at its first missing artifact. Start it from a fresh session.
+description: One-shot prompt → plan → execute pipeline. Runs the prompt, plan and execute stages each in a fresh subagent, relays every stage question to you, persists .zi/{slug}/prompt.md, findings.md and plan.md, then implements the plan and commits on the current branch (never pushes). Oversized implementations are split into .zi/{slug}/phase-NN/ directories that are planned, executed and committed one after another. Resumes a .zi/{slug} task directory at its first missing artifact — per phase when phased. Start it from a fresh session.
 argument-hint: [rough idea, or a .zi/{slug} task directory / bare slug to resume]
 allowed-tools: Bash(date:*), Read, Grep, Glob, Agent, SendMessage, AskUserQuestion, Write, Edit
 ---
@@ -33,8 +33,9 @@ Resolve it with `Glob` only — never `Read` anything under `.zi/`:
 
 1. **Empty** → ask the user (via `AskUserQuestion`) what they want to run. Never invent a topic.
 2. **A task directory** — a `.zi/{slug}/` path (with or without trailing slash) or a bare
-   `{slug}` that exists as `.zi/{slug}/` → `Glob` its contents and **resume at the first
-   missing artifact**:
+   `{slug}` that exists as `.zi/{slug}/` → `Glob` its contents. If `Glob` finds
+   `.zi/{slug}/phase-*/`, the task is **phased** — see the phased branch below. Otherwise
+   (**flat**) **resume at the first missing artifact**:
    - no `prompt.md` → ask the user for the idea, then run the **prompt stage** exactly as for
      raw text. The prompt stage always creates a **fresh** `.zi/{TIMESTAMP}-{slug}/`; the given
      directory is left alone.
@@ -42,6 +43,15 @@ Resolve it with `Glob` only — never `Read` anything under `.zi/`:
    - `plan.draft.md` present, no `plan.md` → **re-verify**: spawn the verifier, then a fresh
      plan agent at the `interrogate` entry point.
    - `plan.md` present → **execute stage**.
+
+   **Phased branch**: sort the `phase-NN` directories lexically and pick the
+   **lowest-numbered one without a `commit` file** (`.zi/{slug}/phase-NN/commit`). Inside it
+   apply the flat per-artifact rules above — `prompt.md` only → plan stage; a lone
+   `plan.draft.md` → re-verify; `plan.md` → execute stage — with every path rewritten as in the
+   "Phased flow" section, then continue the phased flow with every later phase in order. If
+   every phase carries `commit` → report that the task is complete; nothing runs. A phase
+   directory **without `prompt.md`** is never routed to the "ask for the idea" rule (that would
+   start an unrelated flat task): report the task as malformed, naming that directory, and stop.
 3. **Anything else** → the argument is the raw idea (text, or a path to a file outside `.zi/`
    that the prompt stage will read) → **prompt stage**.
 
@@ -124,9 +134,17 @@ the payload names.
 Spawn a fresh `general-purpose` `Agent` (never `fork`). Its prompt contains, and only
 contains: the relay protocol block; "Read and follow `<absolute prompt-stage path>`"; the seam
 bindings **ASK = the relay** (Phase 1: one question per QUESTION payload; Phase 2: risk batches
-of up to 4 per payload), **AUTONOMY = as bound in the relay preamble** and **TIMESTAMP = `<the
-value above>`**; and the raw idea (text verbatim, or the file path). Run the relay loop. On DONE take `ARTIFACTS` → the `prompt.md`
-path → `{slug}`. **Auto-continue** to the plan stage — no gate, no confirmation.
+of up to 4 per payload), **AUTONOMY = as bound in the relay preamble**, **PHASING = on** (the
+stage text holds the estimate rule and the thresholds; the host only switches it on) and
+**TIMESTAMP = `<the value above>`**; and the raw idea (text verbatim, or the file path). Run
+the relay loop. On DONE, `ARTIFACTS` is one of two shapes:
+
+- **flat** — a single `.zi/{slug}/prompt.md` path → take `{slug}` from it and **auto-continue**
+  to the plan stage below — no gate, no confirmation. Today's flow, unchanged.
+- **phased** — several `.zi/{slug}/phase-NN/prompt.md` paths → derive `{slug}` from their
+  common prefix and the **phase order** by sorting the `phase-NN` directory names lexically
+  (two-digit padding makes lexical order numeric), then **auto-continue** into the "Phased
+  flow" section below starting at the first phase — no gate, no confirmation.
 
 ### Plan stage
 
@@ -187,16 +205,53 @@ path; DRAFT; findings path; ASK/PERSIST/AUTONOMY as above) instead of resuming o
    - `RESULT: fail` → report the failing `COMMAND` and that the work (its `CHANGED` paths) is
      **staged, not committed**. Done. Never spawn a second fix agent.
 
+### Phased flow
+
+A phased task has no top-level `prompt.md`; each phase directory holds its own four artifacts,
+in full:
+
+- `.zi/{slug}/phase-NN/prompt.md` — written by the prompt stage;
+- `.zi/{slug}/phase-NN/plan.draft.md` — the plan stage's DRAFT;
+- `.zi/{slug}/phase-NN/findings.md` — the verifier's output;
+- `.zi/{slug}/phase-NN/plan.md` — the persisted plan the execute stage implements;
+
+plus the orchestrator's one-line marker `.zi/{slug}/phase-NN/commit`. Below, `P` is shorthand
+for `.zi/{slug}/phase-NN`.
+
+1. For each phase directory `P`, **in order**, run the plan stage and the execute stage
+   **exactly as written above**, with every `.zi/{slug}/<artifact>` path replaced by
+   `P/<artifact>`: prompt path `P/prompt.md`, DRAFT `P/plan.draft.md`, verifier output
+   `P/findings.md`, PERSIST → `P/plan.md`, execute plan path `P/plan.md`. Each phase gets
+   fresh agents (plan, verifier, execute, and at most one fix); the fenced `@P/plan.md` block
+   is printed per phase with the actual path; each phase's execute/fix agent commits on its
+   own under the unchanged execute-stage rules — one commit per phase.
+2. **Commit marker**: on a phase's `RESULT: pass <hash>` write the one-line file `P/commit`
+   containing the hash (this marker is the only file the orchestrator ever writes, and it never
+   reads it back — resume checks its presence with `Glob` only), then start the next phase.
+   Flat tasks get no marker.
+3. **Halt**: on a phase's final `RESULT: fail` (after its single fix agent) stop — never start
+   a later phase — and report the failing phase directory `P`, the `COMMAND`, that the
+   `CHANGED` paths are **staged, not committed**, that earlier phases' commits stay on the
+   branch, and the resume command `/zi:task .zi/{slug}`.
+4. After the last phase passes, report the list of phase plan paths (`P/plan.md`) and their
+   commit hashes, in order. Done.
+
 ## Guardrails
 
 - **Fresh `general-purpose` per stage**; never `fork`; never nested agents — the orchestrator
   spawns the verifier itself, the plan agent never does.
-- **Paths only across boundaries.** The only non-path content that crosses a boundary is: the
-  raw idea text (prompt-stage input), the absolute stage-file paths, the TIMESTAMP value, the
-  failing `COMMAND`, the `CHANGED` path list, and the relayed question/answer text. Anything
-  else — file bodies, diffs, logs, restated artifacts — is a violation.
+- **Paths only across boundaries.** Permitted boundary content is `.zi/{slug}/…` paths — for a
+  phased task the `.zi/{slug}/phase-NN/…` paths of the phase being run. The only non-path
+  content that crosses a boundary is: the raw idea text (prompt-stage input), the absolute
+  stage-file paths, the TIMESTAMP value, the failing `COMMAND`, the `CHANGED` path list, and
+  the relayed question/answer text. Anything else — file bodies, diffs, logs, restated
+  artifacts — is a violation.
+- **Phases run strictly in order**, each with fresh agents, and a phase's agents receive only
+  that phase's `phase-NN/…` paths — no cross-phase artifact path ever crosses a boundary; a
+  phase's failure halts the run.
 - **The relay never restates**, and the orchestrator never reads artifact bodies (`Glob` only
-  under `.zi/`).
+  under `.zi/`). The `P/commit` marker is the only file the orchestrator writes, and it never
+  reads it back — `Glob` presence only.
 - **No gate after the prompt stage.** The only user interaction after `prompt.md` is written is
   the relay for stage questions and finding resolutions.
 - **A non-conforming report is never a done.**
