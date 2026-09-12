@@ -75,6 +75,11 @@ never a push) with a terse single-line message. On failure exactly one fix agent
 the failing command and the changed paths; if it can't make verification pass the work is
 staged, not committed, and you're told which command failed.
 
+**A run is never silent between questions.** The orchestrator prints a status checklist at
+every stage boundary — which stage is running, what each finished stage produced (an artifact
+path or a commit hash), and for phased runs one row per phase with only the running phase
+expanded — so you always know where the pipeline is.
+
 **How much it decides on its own is a dial.** Add a hint to the argument — `with high
 autonomy`, `autonomy: max`, `full autonomy`, `autonomy=low` — to set one of five levels:
 `zero` (aliases `no`, `min`), `low`, `medium`, `high` or `max` (alias `full`); without a hint
