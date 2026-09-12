@@ -42,6 +42,9 @@ with read-only exploration, asks only the questions the code can't answer, and e
 surfaces ambiguities, flaws, side effects, and hidden assumptions for you to resolve. Only once
 intent is confirmed and every raised risk is settled does it write a tight, self-contained
 spec to `.zi/{slug}/prompt.md` — the single input the next phase reads from a fresh context.
+An autonomy hint in the argument (`with high autonomy`, `autonomy: max`) is accepted — the
+default is zero, so an unhinted run asks every question as before — and `prompt.md` carries
+the resulting `Autonomy:` line that `/zi:plan` reads.
 
 ### `/zi:plan` — draft and verify the plan
 
@@ -51,7 +54,8 @@ and build/test/lint commands of your repo. It then launches a **fresh, independe
 that never sees the planning conversation to verify the plan against both the prompt and the
 codebase — checking prompt fidelity, internal consistency, groundedness, feasibility, ordering,
 and verifiability — and returns a structured findings list. You work those findings **one at a
-time**, deciding each resolution, and the plan is updated as you go. Only after you approve does
+time**, deciding each resolution unless the autonomy level lets the stage decide it, and the
+plan is updated as you go. Only after you approve does
 it persist the verified plan to `.zi/{slug}/plan.md` — paired as a sibling of its source
 prompt — and stop. Implementing the plan is a separate step you initiate.
 
@@ -71,12 +75,22 @@ never a push) with a terse single-line message. On failure exactly one fix agent
 the failing command and the changed paths; if it can't make verification pass the work is
 staged, not committed, and you're told which command failed.
 
+**How much it decides on its own is a dial.** Add a hint to the argument — `with high
+autonomy`, `autonomy: max`, `full autonomy`, `autonomy=low` — to set one of five levels:
+`zero` (aliases `no`, `min`), `low`, `medium`, `high` or `max` (alias `full`); without a hint
+`/zi:task` runs at **medium**. For every decision a stage scores how much of the repo it
+touches, how hard it would be to reverse and how sure it is that one answer is best, and
+decides it itself only when that score is within the level — otherwise the question is relayed
+to you. Every self-decision is recorded with its factors and score as a `Decided (auto):` line
+in `prompt.md`, `plan.md` or the commit body, so nothing is decided invisibly; the prompt
+stage's restatement of your idea is always asked, at every level.
+
 **Big jobs are split into phases.** While it grounds the idea, the prompt stage estimates how
 much context the implementation will need (the size of every file it must read or change,
 converted to tokens, times three for tool output, tests and iteration). If the total exceeds
 200K tokens the work is cut into ordered, self-contained phases of at most 100K each, and you
-are asked to **confirm the phase list** — one line per phase with its scope and estimate — before
-anything is written. Each phase then gets its own `.zi/{slug}/phase-NN/prompt.md` (instead of a
+are asked to **confirm the phase list** — one line per phase with its scope and estimate —
+unless the autonomy level lets the stage decide it, before anything is written. Each phase then gets its own `.zi/{slug}/phase-NN/prompt.md` (instead of a
 top-level `prompt.md`) and is planned, verified, executed and **committed on its own, one phase
 after another**, with a `phase-NN/commit` marker recording each hash. If a phase fails after its
 one fix attempt the run **halts**: later phases never start, earlier commits stay on the branch,

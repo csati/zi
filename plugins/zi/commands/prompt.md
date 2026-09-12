@@ -13,7 +13,21 @@ interactive use, and then runs the shared prompt stage included at the end of th
 
 $ARGUMENTS
 
-Resolve the input above before doing anything else:
+Resolve the input above before doing anything else.
+
+**Hint detection first.** Before rules 1–3, apply the hint grammar to the argument text: a hint
+is a level word — `zero` (aliases `no`, `min`), `low`, `medium`, `high`, `max` (alias `full`);
+case-insensitive; the canonical name is what you bind — adjacent to the word `autonomy`, in
+either order, optionally joined by `:` or `=` (`with high autonomy`, `autonomy: max`,
+`full autonomy`, `autonomy=low`). Strip the span — the level word + `autonomy`, an immediately
+preceding connective (`with`, `at`, `under`, `using`, `in`), and the punctuation/whitespace that
+joined the span to its neighbours — leaving the rest of the argument verbatim, and bind AUTONOMY
+to `<level> (<setting>), from hint` with the setting `zero` = 0.0, `low` = 0.25,
+`medium` = 0.5, `high` = 0.75, `max` = 1.0. Two or more hints naming different levels → ask the
+user which one applies (one `AskUserQuestion`) before doing anything else. An argument that is
+empty after stripping is empty under rule 3, with the detected level kept. A hint inside a file
+the argument names is found and stripped by the stage itself (its Input contract), which
+overrides this binding.
 
 1. If it is a path to an existing file, read it and treat its contents as the raw idea.
 2. Otherwise, treat the argument text verbatim as the raw idea.
@@ -27,7 +41,7 @@ user has explicit feedback on exactly what is being refined.
 | Seam | Binding in this command |
 |---|---|
 | ASK | `AskUserQuestion`. Phase 1: exactly **one question per call, asked sequentially**, never batched into one call; the tool's free-text "Other" path is the free-text path. Phase 2: **batched** calls of up to the tool's 4-question max, multiple sequential calls of ≤4 when more risks exist. |
-| AUTONOMY | **none** — every decision goes through ASK; interactive behaviour is unchanged. |
+| AUTONOMY | `<level> (<setting>), from hint` when a hint was detected in the argument text, else **`zero (0.0), default`** — an unhinted run asks every question as today. |
 | PHASING | **off** — always a single `prompt.md`; no estimate is computed or recorded, interactive behaviour is unchanged. |
 | TIMESTAMP | the value below, captured when the command was invoked (only if it is missing, run `date +%Y%m%d-%H%M%S` yourself): |
 

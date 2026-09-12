@@ -7,7 +7,7 @@ the `/zi:task` orchestrator) loads it and binds the seams below before it runs.
 
 The host binds these before the stage runs; if a seam you need is unbound, stop and ask the
 host — never improvise a binding. AUTONOMY is the one seam with a documented default, so it
-never needs asking about: unbound means none.
+never needs asking about: unbound means zero (0.0).
 
 | Seam | Meaning |
 |---|---|
@@ -15,7 +15,7 @@ never needs asking about: unbound means none.
 | DRAFT | where the plan is drafted and edited while findings are resolved |
 | VERIFY | who launches the independent verifier, what it receives, and how its findings come back to you |
 | PERSIST | how the finished DRAFT becomes `.zi/{slug}/plan.md` |
-| AUTONOMY | which decisions the agent may resolve itself instead of via ASK. **Default when unbound: none — always ASK.** |
+| AUTONOMY | the numeric autonomy setting the per-decision score is compared against, bound as `<level> (<setting>)` — by a detecting host followed by a provenance word, `, from hint` or `, default`, which the prompt stage's restatement echoes. **Default when unbound: zero (0.0) — always ASK.** |
 
 ## Input contract
 
@@ -36,11 +36,22 @@ The host hands you:
   That independence is the entire point of the verification step — never self-review in its
   place.
 - **Report vs. fix is a hard line.** The verifier only *reports* findings; fixes are applied
-  only after the user resolves each one.
-- **A guessed decision is a failure; ASK is the only way to resolve one, except a decision AUTONOMY lets you resolve yourself.**
-  Never silently pick an interpretation. The exemption never covers intent. Every decision you
-  resolve yourself under AUTONOMY MUST be recorded in DRAFT (hence in `plan.md` after PERSIST)
-  as `Decided (auto): <choice> — <reason>`.
+  only after the user — or, at a score within the AUTONOMY setting, you — resolves each one.
+- **A guessed decision is a failure; a decision is resolved either via ASK or, when its score
+  is within the AUTONOMY setting, by you — and then recorded.** AUTONOMY is a numeric setting on
+  a five-step scale — **levels**: `zero` (aliases `no`, `min`) = 0.0, `low` = 0.25,
+  `medium` = 0.5, `high` = 0.75, `max` (alias `full`) = 1.0; the canonical name is the one
+  written in bindings and artifacts (`Autonomy: max (1.0)`, never `full`). **Score**: for each
+  decision estimate `x1` = blast radius in 0..1 (1 = every source file affected, 0 = nothing in
+  the repo changes), `x2` = commitment in 0..1 (1 = practically irreversible, ≈0 = a short
+  prompt and minutes of trivial agentic work to change later), `x3` = confidence in 0..1 that
+  one answer is best; `score = 1 - (1 - x1) × (1 - x2) × x3`. Self-resolve only when
+  `score ≤ setting`; otherwise raise it via ASK. Factors and score are written as decimals with
+  at most two places. Never silently pick an interpretation: a decision resolved without either
+  ASK or a recorded score is a failure. This stage has no exempt decision — the always-asked
+  restatement lives in the prompt stage. Every decision you resolve yourself MUST be recorded
+  in DRAFT (hence in `plan.md` after PERSIST) as
+  `Decided (auto): <choice> — <reason> (x1=<v> x2=<v> x3=<v> score=<v>)`.
 - **Never write the PERSIST target early.** `.zi/{slug}/plan.md` comes into existence only
   through PERSIST, after the last finding is resolved — never during drafting or verification.
 - This stage plans and verifies; it never implements. Writing code is the host's decision,
@@ -97,17 +108,23 @@ this conversation, so no rule stated here reaches it unless repeated in its prom
   `Decided (user):` was resolved by the user (in an earlier review round) — never re-report one
   without new evidence.
 - **`Decided (auto):` items in the plan are challengeable.** A decision the plan records under
-  the label `Decided (auto):` was resolved by the planning agent itself under AUTONOMY. The
-  verifier may report one as a finding when it judges an AUTONOMY criterion unmet or the
-  choice wrong; such a finding is resolved with the user via ASK, never auto-resolved again.
-  This applies to `Decided (auto):` lines **in the plan (DRAFT) only**; `Decided (auto):` lines
-  in `prompt.md` are prompt constraints, checked for fidelity like any other prompt requirement
-  and never challenged. The verifier cannot see the host's binding, so the criteria a host that
-  binds AUTONOMY uses (today: `/zi:task`) are stated here — a decision may be self-resolved only
-  when all three hold:
-  1. it has a **moderate blast radius in code** and is **not a fundamental architectural decision**;
-  2. it is **easy to reverse later**;
-  3. there is **one clearly best answer**.
+  the label `Decided (auto):` was resolved by the planning agent itself because its score was
+  within the autonomy setting. The verifier takes the **setting** from the fixed-form
+  `Autonomy: <level> (<setting>)` line of the prompt it received (line absent, or an inline
+  prompt → zero (0.0)); the levels are `zero` (aliases `no`, `min`) = 0.0, `low` = 0.25,
+  `medium` = 0.5, `high` = 0.75, `max` (alias `full`) = 1.0. The recorded factors are `x1` =
+  blast radius in 0..1 (1 = every source file affected, 0 = nothing in the repo changes), `x2` =
+  commitment in 0..1 (1 = practically irreversible, ≈0 = a short prompt and minutes of trivial
+  agentic work to change later), `x3` = confidence in 0..1 that one answer is best, and
+  `score = 1 - (1 - x1) × (1 - x2) × x3`, so the verifier can recompute. It reports a
+  `Decided (auto):` line as a finding **only** when it judges a factor estimate wrong such that
+  the corrected score would exceed the setting, giving its corrected factors as the finding's
+  evidence. Independently of that judgement, a `Decided (auto):` line that lacks factors, whose
+  `score` does not follow from its factors by the formula, or whose recorded `score` already
+  exceeds the setting is reported under the **internal consistency** check. This applies to
+  `Decided (auto):` lines **in the plan (DRAFT) only**; `Decided (auto):` lines in `prompt.md`
+  are prompt constraints, checked for fidelity like any other prompt requirement and never
+  challenged.
 
 The verifier **only reports** — it must not edit the plan, the prompt, or any source. If it
 finds nothing, it says so plainly.
@@ -124,12 +141,18 @@ batch:
    "(Recommended)"), any meaningful alternative, and an explicit **"Keep as-is"** option.
    Always carry a recommended option; when the recommendation's confidence is low, the
    question text must say so explicitly. The user may also give a custom resolution.
-   A finding that AUTONOMY covers may be resolved without ASK, in which case step 4 records it
-   in DRAFT as `Decided (auto): <choice> — <reason>`. A finding that challenges an existing
-   `Decided (auto):` line is **always** resolved via ASK — never auto-resolved a second time.
+   Every finding is scored; a score ≤ setting resolves it without ASK, in which case step 4
+   records it in DRAFT as `Decided (auto): <choice> — <reason> (x1=<v> x2=<v> x3=<v> score=<v>)`.
+   A finding that challenges an existing `Decided (auto):` line is **re-scored** like any
+   decision: re-estimate `x1` and `x2` yourself in light of the verifier's evidence (they may
+   differ from the verifier's corrected values) and cap `x3` at the previously recorded value;
+   `score ≤ setting` → keep the decision and rewrite its line in place with the new factors, the
+   marker going inside the parentheses — `(x1=… x2=… x3=… score=…; re-scored)`; otherwise
+   resolve it via ASK (recommended fix / alternative / Keep as-is) and record `Decided (user): …`.
 4. **Immediately apply the resolution** to DRAFT before raising the next finding — either make
    the fix, or leave it and record the deliberate decision in the plan as `Decided (user): …`
-   (or, when you resolved it yourself under AUTONOMY, as `Decided (auto): <choice> — <reason>`).
+   (or, when you resolved it yourself, as
+   `Decided (auto): <choice> — <reason> (x1=<v> x2=<v> x3=<v> score=<v>)`).
 
 Surface, resolve, and apply **one** finding before raising the next. If the verifier found
 nothing, say so plainly and proceed.
@@ -147,5 +170,6 @@ follows — is the host's business, not this stage's.
   asserting a false specific.
 - **Decisions are recorded.** A finding the user resolved with "Keep as-is" or a custom
   resolution is recorded in the plan as `Decided (user): …`, so a later verifier treats it as
-  settled. A finding the agent resolved itself under AUTONOMY is recorded as
-  `Decided (auto): <choice> — <reason>`, which a later verifier may challenge.
+  settled. A finding the agent resolved itself at a score within the autonomy setting is
+  recorded as `Decided (auto): <choice> — <reason> (x1=<v> x2=<v> x3=<v> score=<v>)`, which a
+  later verifier may challenge by recomputing the score.

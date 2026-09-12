@@ -7,12 +7,12 @@ orchestrator) loads it and binds the seam below before it runs.
 
 The host binds these before the stage runs; if a seam you need is unbound, stop and ask the
 host — never improvise a binding. AUTONOMY is the one seam with a documented default, so it
-never needs asking about: unbound means none.
+never needs asking about: unbound means zero (0.0).
 
 | Seam | Meaning |
 |---|---|
 | ASK | how to put a decision to the user and get the answer back |
-| AUTONOMY | which decisions the agent may resolve itself instead of via ASK. **Default when unbound: none — always ASK.** |
+| AUTONOMY | the numeric autonomy setting the per-decision score is compared against, bound as `<level> (<setting>)` — by a detecting host followed by a provenance word, `, from hint` or `, default`, which the prompt stage's restatement echoes. **Default when unbound: zero (0.0) — always ASK.** |
 
 ## Input contract
 
@@ -31,11 +31,22 @@ The host hands you:
 - **Ground in the live repo** with Read/Grep/Glob before touching a file; the plan names
   target interfaces, the code is the source of truth for how they fit.
 - **Implement exactly the plan** — no more, no less. Where the plan leaves a real decision
-  open, resolve it via ASK.
-  **A guessed decision is a failure; ASK is the only way to resolve one, except a decision AUTONOMY lets you resolve yourself.**
-  The exemption never covers intent. Every decision you resolve yourself under AUTONOMY MUST be
-  recorded — for this stage the record is the **commit body** (see the git rules below), not
-  `plan.md`. Do not ask what the plan or the code already answers.
+  open, resolve it via ASK or, at a score ≤ setting, yourself.
+  **A guessed decision is a failure; a decision is resolved either via ASK or, when its score
+  is within the AUTONOMY setting, by you — and then recorded.** AUTONOMY is a numeric setting on
+  a five-step scale — **levels**: `zero` (aliases `no`, `min`) = 0.0, `low` = 0.25,
+  `medium` = 0.5, `high` = 0.75, `max` (alias `full`) = 1.0; the canonical name is the one
+  written in bindings and artifacts (`Autonomy: max (1.0)`, never `full`). **Score**: for each
+  decision estimate `x1` = blast radius in 0..1 (1 = every source file affected, 0 = nothing in
+  the repo changes), `x2` = commitment in 0..1 (1 = practically irreversible, ≈0 = a short
+  prompt and minutes of trivial agentic work to change later), `x3` = confidence in 0..1 that
+  one answer is best; `score = 1 - (1 - x1) × (1 - x2) × x3`. Self-resolve only when
+  `score ≤ setting`; otherwise raise it via ASK. Factors and score are written as decimals with
+  at most two places. Never silently pick an interpretation: a decision resolved without either
+  ASK or a recorded score is a failure. Every decision you resolve yourself MUST be recorded —
+  for this stage the record is the **commit body** (see the git rules below), not `plan.md` —
+  as `Decided (auto): <choice> — <reason> (x1=<v> x2=<v> x3=<v> score=<v>)`. Do not ask what
+  the plan or the code already answers.
 - **Git rules** (self-contained restatement of the plugin's commit conventions):
   - Never push.
   - Never `--amend`, never `-a`, never `--no-verify`.
@@ -47,7 +58,8 @@ The host hands you:
   - Commit message: the **subject** is a single terse imperative sentence ("Add X", "Fix Y") —
     prefer brevity over clarity, under 50 characters when possible. A **body** is permitted
     **only** when auto-decisions exist, and then consists solely of the
-    `Decided (auto): <choice> — <reason>` lines, one per line; still no trailers, no
+    `Decided (auto): <choice> — <reason> (x1=<v> x2=<v> x3=<v> score=<v>)` lines, one per
+    line; still no trailers, no
     Co-Authored-By, no attribution. Commit with `git commit -m "<subject>"`, adding a second
     `-m "<body>"` only when a body exists.
   - If the pre-commit hook fails, fix the issue and create a new commit; never bypass the hook.

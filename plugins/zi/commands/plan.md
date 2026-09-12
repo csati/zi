@@ -57,6 +57,8 @@ Resolution rules:
 **Resolution may only read the prompt.** The single Read permitted here is of the prompt
 file the argument resolves to (rule 1 or 2). Do **not** Read/Grep/Glob the codebase during
 resolution — all codebase exploration happens *inside* plan mode in Phase 1, never before it.
+While reading that prompt file, note its fixed-form `Autonomy: <level> (<setting>)` line if
+present — it is the AUTONOMY binding below.
 
 **Remember where the prompt came from.** If it resolved to a file **inside an existing
 `.zi/{slug}/` directory**, note that — it decides where the plan is persisted in Phase 4.
@@ -78,9 +80,9 @@ proceed — never explore or draft outside plan mode.
 |---|---|
 | ASK | `AskUserQuestion` — one finding per call: the recommended fix first (labelled "(Recommended)"), any meaningful alternative, and an explicit **"Keep as-is"**; the tool's "Other" path is the custom-resolution path. |
 | DRAFT | the **harness plan file** named in the plan-mode system message; draft with `Write`, apply finding resolutions with `Edit`. |
-| VERIFY | this command launches **one fresh subagent** with the `Agent` tool, using a read-only agent type (`Explore`, or a `general-purpose` agent explicitly instructed to stay read-only and only report), with no access to this conversation. It receives exactly the harness plan file path and the resolved prompt (file path, or inline text verbatim) plus the stage's **Verifier mandate** — including its three explicitly-repeated rules — and its findings arrive in its report text. |
+| VERIFY | this command launches **one fresh subagent** with the `Agent` tool, using a read-only agent type (`Explore`, or a `general-purpose` agent explicitly instructed to stay read-only and only report), with no access to this conversation. It receives exactly the harness plan file path and the resolved prompt (file path, or inline text verbatim) plus the stage's **Verifier mandate** — including its three explicitly-repeated rules — and its findings arrive in its report text. It reads the autonomy level from the prompt's `Autonomy:` line per the mandate (absent, or inline text → zero). |
 | PERSIST | Phase 4 below: the three-way choice, the bootstrap line, `ExitPlanMode`, then the Persistence rules. |
-| AUTONOMY | **none** — every decision goes through ASK; interactive behaviour is unchanged. |
+| AUTONOMY | the `Autonomy: <level> (<setting>)` line of the prompt file the argument resolved to; **zero (0.0)** when the line is absent or the prompt is inline text (no provenance word — this host has no restatement and detects no hint). It governs decisions inside the stage's Phases 1–3 and, on **Execute now**, implementation-time decisions; the Phase 4 choice itself is a host gate (see below). |
 
 Entry point: `draft` (the stage's Phase 1). Run the stage's Phases 1–3, then come back here
 for Phase 4.
@@ -89,7 +91,10 @@ for Phase 4.
 
 Once every finding from the **latest** verification round is resolved and the plan is fully
 updated, do **not** exit plan mode automatically. Present a single `AskUserQuestion` with
-exactly three choices and act on the answer:
+exactly three choices and act on the answer. This three-way choice and the `ExitPlanMode`
+approval are **host gates, never scored — always asked at every autonomy level**; only
+decisions inside the stage's Phases 1–3 and during Execute-now implementation use the AUTONOMY
+binding.
 
 1. **Execute now** — implement the finished plan in this same context. Call `ExitPlanMode` to
    leave plan mode (include any `allowedPrompts` the implementation needs, e.g. "run tests",
@@ -178,7 +183,11 @@ On **Exit plan mode**, stop here. On **Execute now**, go on to implement the pla
 - **Independence is mandatory.** Every verifier — the first and each **Run a second reviewer**
   round — is a fresh subagent with no view of this conversation, not a self-review pass.
 - **One finding at a time.** In every review round, resolve and apply each finding before raising
-  the next; never present them as a batch, and never silently pick an interpretation — ask.
+  the next; never present them as a batch, and never silently pick an interpretation — ask, or
+  self-resolve only at a score ≤ the bound setting and record it.
+- **Phase 4 is never scored.** The three-way choice and the `ExitPlanMode` approval are host
+  gates, always asked at every autonomy level; the binding applies only inside the stage's
+  Phases 1–3 and to implementation-time decisions on **Execute now**.
 - **Ground every claim; specify intent, not source.** Describe what to build and the target
   interfaces; do not paste final code into the plan.
 - **Implementation is opt-in and final.** The command writes code only on the explicit

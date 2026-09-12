@@ -46,7 +46,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.4.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.5.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## The core architecture: a directory-per-task, context-cleared flow
@@ -83,7 +83,7 @@ an artifact out of its task directory breaks how the next phase locates its inpu
 |---|---|---|---|
 | `/zi:prompt` | a rough idea | `{slug}/prompt.md` | interrogate intent, surface flaws/side effects, save refined prompt |
 | `/zi:plan` | `{slug}/prompt.md`, a task-dir reference, or inline text | `{slug}/plan.md` | draft a plan, independently verify it (repeatable), then by user choice execute it, exit & persist, or re-review |
-| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, a commit — or, when phased, `{slug}/phase-NN/{prompt,findings,plan}.md` + `{slug}/phase-NN/commit` per phase | one-shot prompt → plan → execute, each stage in a fresh subagent, questions relayed to the user; commits on the current branch — one chain and one commit per phase when the estimate exceeds 200K |
+| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume — either optionally carrying an autonomy hint (`with high autonomy`, `autonomy: max`) | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, a commit — or, when phased, `{slug}/phase-NN/{prompt,findings,plan}.md` + `{slug}/phase-NN/commit` per phase | one-shot prompt → plan → execute, each stage in a fresh subagent, questions relayed to the user; commits on the current branch — one chain and one commit per phase when the estimate exceeds 200K |
 
 Note: `plan.md`'s frontmatter `description` contrasts itself with a fuller
 `prompt→research→prd→decompose` pipeline. That larger pipeline is **aspirational/comparative
@@ -126,12 +126,26 @@ verbatim in one `AskUserQuestion`, `SendMessage`s the answers back to the same a
 by the `agentId` from the spawn result — subagents carry no name), and loops until a
 conforming `STATUS: done` payload arrives. Any other report is treated as a question to relay,
 never as done. Both ends are hardened: every stage prompt says a guessed decision is a failure
-and the question payload is the only way to resolve one **except under AUTONOMY** — the seam
-the preamble binds to the three criteria (moderate, non-architectural blast radius; easy to
-reverse; one clearly best answer). Intent is never auto-resolved; every auto-decision is
-recorded as `Decided (auto): …` in the stage artifact (or the execute commit body) and every
-user decision as `Decided (user): …` — the former challengeable by the verifier, the latter
-settled.
+and the question payload is the only way to resolve one **except when its score is within the
+AUTONOMY setting** — a numeric level on a five-step scale (`zero` = 0.0, `low` = 0.25,
+`medium` = 0.5, `high` = 0.75, `max` = 1.0; aliases `no`/`min` → zero, `full` → max). The
+agent scores each decision from three 0..1 factors — `x1` blast radius, `x2` commitment
+(irreversibility), `x3` confidence that one answer is best — as
+`score = 1 - (1 - x1) × (1 - x2) × x3`, and self-resolves only when `score ≤ setting`. The
+level comes from a natural-language **hint** in the argument (`with high autonomy`,
+`autonomy: max`, `full autonomy`, `autonomy=low`), stripped before the text is used; without
+one `/zi:task` binds **medium**, `/zi:prompt` and `/zi:plan` **zero** (interactive behaviour
+unchanged). The prompt stage writes the level into `prompt.md` as a fixed-form
+`Autonomy: <level> (<setting>)` line, which `/zi:plan` and the verifier read; the prompt
+stage's restatement/confirmation is the one decision always asked, at every level. Every
+auto-decision is recorded with its factors as
+`Decided (auto): <choice> — <reason> (x1=… x2=… x3=… score=…)` in the stage artifact (or the
+execute commit body) and every user decision as `Decided (user): …` — the latter settled, the
+former challengeable by the verifier only when a corrected factor estimate pushes the score
+above the setting (a challenged line is re-scored by the plan agent, `x3` capped at its
+recorded value, and asked only if it then exceeds the setting). The orchestrator rescans every
+answer it relays to the prompt-stage agent for a hint and rebinds the level for every later
+spawn when it finds one.
 
 **Flow.** prompt stage → `prompt.md` → (no gate) plan stage drafts `plan.draft.md` → the
 orchestrator spawns a read-only verifier that writes `findings.md` → the plan agent is resumed
@@ -153,8 +167,10 @@ bytes per token, ×3 overhead for tool output, tests and iteration (re-summed on
 gate if interrogation changed the file set) — and records it as a fixed-form `Estimate:` line.
 A total ≤200K tokens stays flat. A total >200K is partitioned into ordered, self-contained
 phases of ≤100K each (an uncuttable oversized phase is raised as a Phase-2 risk); the phase list
-(`phase-NN: <scope> (~<N>K)` per line plus the total) is **confirmed with the user via ASK** — it
-is the cross-phase coverage check, since each phase's verifier sees only its own prompt — and
+(`phase-NN: <scope> (~<N>K)` per line plus the total) is **confirmed by the user via ASK, or
+self-confirmed when its score is within the bound autonomy setting** (recorded as
+`Decided (auto):`) — it is the cross-phase coverage check, since each phase's verifier sees
+only its own prompt — and
 only then are the `.zi/{slug}/phase-NN/prompt.md` files written (no top-level `prompt.md`; each
 names its phase N of M, states what earlier phases are assumed to have landed, and restates the
 decision lines that constrain it). The orchestrator reads the multi-path `ARTIFACTS` line, sorts
@@ -174,16 +190,17 @@ know nothing about phases.
 user), **TIMESTAMP** (the invocation `date` value — inline `` !`date` `` does not resolve for
 subagents), and for the plan stage **DRAFT** (where the plan is drafted), **VERIFY** (who
 launches the verifier and how findings come back) and **PERSIST** (how `plan.md` is finalised),
-plus **AUTONOMY** in every stage (which decisions the agent may resolve itself instead of via
-ASK; a seam with a default — unbound = none, always ASK — so an older host keeps the
+plus **AUTONOMY** in every stage (the numeric setting the per-decision score is compared
+against; a seam with a default — unbound = zero, always ASK — so an older host keeps the
 always-ask behaviour) and, for the prompt stage only, **PHASING** (whether an oversized
 implementation is split into phase prompts; the other defaulted seam — unbound = off). The
 `/zi:prompt` / `/zi:plan` wrappers bind ASK = `AskUserQuestion`,
 DRAFT = the harness plan file, VERIFY = the wrapper launches the `Agent` verifier, PERSIST =
-the Phase 4 three-way choice + bootstrap line + `ExitPlanMode`, AUTONOMY = none, PHASING = off;
+the Phase 4 three-way choice + bootstrap line + `ExitPlanMode`, AUTONOMY = the hint or zero
+(`/zi:prompt`) / the prompt file's `Autonomy:` line or zero (`/zi:plan`), PHASING = off;
 the orchestrator binds ASK = the relay, DRAFT = `.zi/{slug}/plan.draft.md`, VERIFY = an
 orchestrator-spawned verifier writing `findings.md`, PERSIST = rename to `plan.md`, AUTONOMY =
-the three criteria stated in the relay preamble, PHASING = on. Each stage file opens with a Seams table; keep
+the hint or medium, bound in the relay preamble, PHASING = on. Each stage file opens with a Seams table; keep
 it in sync when a host's binding changes. When editing a stage file remember it has **two hosts** — a change
 must hold for the interactive wrapper and for a relay-driven subagent alike.
 
