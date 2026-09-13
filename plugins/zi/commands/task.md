@@ -147,14 +147,27 @@ id so you can resume that same agent. Then:
    Answers to any other stage are never scanned.
 2. **Conforming DONE** → proceed with the stage flow below.
 3. **Anything else** — prose, a missing `STATUS` line, malformed lists, a plan-stage DONE whose
-   `ARTIFACTS` names neither `plan.draft.md` nor `plan.md` — is a **question, never a done**:
-   put the report to the user via `AskUserQuestion` (header `Agent`, question "The stage agent
-   returned a non-conforming report — what next?", options **"Tell the agent to continue and
-   answer with a conforming payload (Recommended)"** and **"Stop the pipeline"**; the tool's
-   "Other" path carries free text). On "continue" or free text → `SendMessage` that instruction
-   (or the free text) to the same agent and wait for its next report. On "Stop" → report the
-   current state (stage reached, artifacts so far) and end the pipeline without messaging the
-   agent. This is an error path, not a decision: it stays an `AskUserQuestion` at every level.
+   `ARTIFACTS` names neither `plan.draft.md` nor `plan.md` — is **never a done**. Handle it in
+   two tiers, counting non-conforming reports **per spawned agent** (the count resets for
+   every fresh spawn, never carries across agents or phases):
+   - **Nudge (first and second time for this agent)** → without asking the user, `SendMessage`
+     to the same agent exactly: "Your last report was not a conforming payload. Continue your
+     stage from where you stopped and reply with exactly one of the two payloads (STATUS:
+     question or STATUS: done) and nothing else." Then wait for its next report and re-enter
+     this loop. The user sees nothing for a nudge — no print, no question.
+   - **Escalate (third time for this agent)** → put the report to the user via
+     `AskUserQuestion` (header `Agent`, question "The stage agent returned a non-conforming
+     report three times — what next?", options **"Tell the agent to continue and answer with a
+     conforming payload (Recommended)"** and **"Stop the pipeline"**; the tool's "Other" path
+     carries free text). On "continue" or free text → `SendMessage` that instruction (or the
+     free text) to the same agent, wait for its next report and re-enter this loop (a further
+     non-conforming report escalates again — never a fourth silent nudge). On "Stop" → report
+     the current state (stage reached, artifacts so far) and end the pipeline without
+     messaging the agent.
+
+   The nudge text is fixed: never paraphrase the agent's report back to it, never add hints
+   about what the answer should be. This is an error path, not a decision: the escalation
+   stays an `AskUserQuestion` at every level.
 
 Relay without restating: the user sees the question payload as-is and the agent gets the
 answers as-is. Never summarise, never add your own interpretation, never read the artifacts
@@ -206,8 +219,8 @@ else:
   `[!]`), and on `RESULT: pass <hash>` the `commit` row becomes `[x]` in the same print.
 
 No print happens while a question is being relayed or answers are being sent back (relay-loop
-step 1), nor on the non-conforming-report path (relay-loop step 3) — the `AskUserQuestion`
-itself is the visible feedback there. The fenced `@.zi/{slug}/plan.md` block of plan-stage
+step 1), nor on the non-conforming-report path (relay-loop step 3) — a nudge is silent by
+design and the escalation's `AskUserQuestion` is the visible feedback there. The fenced `@.zi/{slug}/plan.md` block of plan-stage
 step 4 stays exactly as it is and is printed **in addition to** the checklist, between the
 plan-DONE print and the execute-spawn print.
 
@@ -450,7 +463,8 @@ for `.zi/{slug}/phase-NN`.
   or artifact content.
 - **No gate after the prompt stage.** The only user interaction after `prompt.md` is written is
   the relay for stage questions and finding resolutions.
-- **A non-conforming report is never a done.**
+- **A non-conforming report is never a done.** It is nudged silently at most twice per
+  agent, then escalated to the user.
 - **AUTONOMY is bounded.** Subagents self-resolve only decisions scoring ≤ the bound setting
   and always record the factors and the score in the artifact or commit body, never in a
   payload; the prompt stage's restatement is always asked. The hint is detected only in the

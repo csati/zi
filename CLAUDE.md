@@ -124,8 +124,10 @@ stops and returns a structured `STATUS: question` payload (1–4 questions, each
 question text and options, the "(Recommended)" one first); the orchestrator puts it to the user
 verbatim in one `AskUserQuestion`, `SendMessage`s the answers back to the same agent (addressed
 by the `agentId` from the spawn result — subagents carry no name), and loops until a
-conforming `STATUS: done` payload arrives. Any other report is treated as a question to relay,
-never as done. Both ends are hardened: every stage prompt says a guessed decision is a failure
+conforming `STATUS: done` payload arrives. Any other report is never a done: the orchestrator
+silently nudges the same agent (a fixed "reply with exactly one of the two payloads" message)
+up to twice per spawned agent, and only on the third non-conforming report asks the user
+(continue / stop). Both ends are hardened: every stage prompt says a guessed decision is a failure
 and the question payload is the only way to resolve one **except when its score is within the
 AUTONOMY setting** — a numeric level on a five-step scale (`zero` = 0.0, `low` = 0.25,
 `medium` = 0.5, `high` = 0.75, `max` = 1.0; aliases `no`/`min` → zero, `full` → max). The
