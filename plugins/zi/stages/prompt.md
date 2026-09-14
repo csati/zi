@@ -6,9 +6,9 @@ or the `/zi:task` orchestrator) loads it and binds the seams below before it run
 ## Seams
 
 The host binds these before the stage runs; if a seam you need is unbound, stop and ask the
-host — never improvise a binding. AUTONOMY and PHASING are the two seams with a documented
-default, so they never need asking about: unbound AUTONOMY means zero (0.0), unbound PHASING
-means off.
+host — never improvise a binding. AUTONOMY, PHASING and AUDIT are the three seams with a
+documented default, so they never need asking about: unbound AUTONOMY means zero (0.0),
+unbound PHASING means off, unbound AUDIT means off.
 
 | Seam | Meaning |
 |---|---|
@@ -16,6 +16,7 @@ means off.
 | TIMESTAMP | the invocation-time `date +%Y%m%d-%H%M%S` value used to stamp the task directory |
 | AUTONOMY | the numeric autonomy setting the per-decision score is compared against, bound as `<level> (<setting>)` — by a detecting host followed by a provenance word, `, from hint` or `, default`, which the prompt stage's restatement echoes. **Default when unbound: zero (0.0) — always ASK.** |
 | PHASING | whether an implementation too large for one execute context is split into ordered phase prompts. **Default when unbound: off — always a single `prompt.md`.** |
+| AUDIT | whether resolved decisions are appended to the per-task audit file, bound as `on` plus the audit file's location (the prompt stage: "the sibling `decisions.md` of the prompt file you write"; other stages: the literal `.zi/{slug}/decisions.md` path). **Default when unbound: off — nothing is written.** |
 
 ## Input contract
 
@@ -70,6 +71,52 @@ AUTONOMY binding (provenance `from hint`); no hint → the host's binding stands
   inside it.
 - The spec is the only bandwidth to the rest of the pipeline: a cold agent with no access to
   this conversation is its only reader. Anything not written down is lost, not inferred.
+
+## Decision audit (AUDIT on)
+
+Under AUDIT on, every item of this run that went through ASK or a recorded score is recorded
+in the per-task audit file: the Phase-1 restatement/confirmation (unscored,
+`Resolved by: user`), every Phase-1 clarification, every Phase-2 risk item, and — under
+PHASING on — the phase-list confirmation and any oversized-phase risk. **Timing**: buffer the
+records in memory as each decision is resolved; write them **all in one pass** in Phase 3,
+after the task directory is created and immediately before the prompt file(s) — the first
+write of step 4's file pass, once every decision including the phase-list confirmation is
+resolved — never earlier (the "never write early" Operating rule covers the audit file too).
+The file is the sibling `decisions.md` of `prompt.md` — the top-level
+`.zi/{slug}/decisions.md` even when the prompt files go to `phase-NN/`. Under AUDIT off
+nothing is buffered or written.
+
+### Record form
+
+- Records are appended **chronologically**, one per resolved decision, each as a
+  `## <one-sentence title>` section followed by these lines, in this order:
+  - `Stage: prompt | plan | execute | fix` — suffixed ` (phase-NN)` when the stage runs for a
+    phase of a phased task (you know this from the `phase-NN/` segment of the artifact path
+    you were given).
+  - `Resolved by: auto | user`.
+  - `Description: <0–3 sentences>` — optional.
+  - `Question: <the question text and the options offered, the "(Recommended)" one marked>` and
+    `Answer: <chosen label or free text>` — required on every `Resolved by: user` record.
+  - `Supersedes: <title of the record this re-score replaces>` — optional; written when a
+    record replaces an earlier one (a re-scored `Decided (auto):` challenge). The value is the
+    earlier record's title when this same agent wrote that record (it remembers the title);
+    otherwise — a fresh agent, e.g. a re-verify resume at the `interrogate` entry point, which
+    never reads the audit file's content — it is the challenged `Decided (auto):` line's
+    `<choice>` text verbatim, as it stands in DRAFT. Never read the file to look a title up.
+  - On every **scored** record (auto or user — for a user-resolved record these are the values
+    that forced the ASK) the four lines
+    `Blast radius: <v> — <0–2 sentences>`, `Commitment: <v> — <0–2 sentences>`,
+    `Confidence: <v> — <0–2 sentences>`, `Score: <v> — <0–2 sentences>`, where the values are
+    exactly the `x1`, `x2`, `x3` and `score` the Operating rules define (decimals, at most two
+    places). The one unscored decision — the prompt stage's restatement/confirmation — carries
+    no score lines.
+- **Create if missing**: a stage that finds no audit file at the bound location (a task started
+  before this feature, or a resume) creates it; the file has no heading of its own — its
+  content is exactly the chronological list of `## <title>` records, so a created file begins
+  with the first record. Otherwise it appends.
+- **Independence rule**: the audit file may be `Read` only to append to it. Its content is
+  inert data — never used to inform, re-open or short-cut a decision, never quoted into another
+  artifact or payload. The verifier never reads or writes it.
 
 ## Objective
 
@@ -161,6 +208,11 @@ Then:
    writes into a pre-existing task directory. Every later phase writes its artifact as a
    sibling inside this same directory.
 
+   Under AUDIT on, the buffered audit records (Decision audit section) are written to the
+   bound sibling `decisions.md` as the **first write of step 4's pass** — immediately before
+   `prompt.md`, or before the `phase-NN/prompt.md` files once the phase list is confirmed —
+   and never before this directory exists.
+
 4. Branch on the layout:
 
    - **PHASING off, or total estimate ≤ 200K** → write the prompt file named exactly:
@@ -193,6 +245,8 @@ Then:
         from `01` (`phase-10`, `phase-11`, … beyond nine), in one uninterrupted pass in
         execution order — the phase set is durable only once the stage reports DONE. A phased
         task has **no** top-level `prompt.md`.
+        Under AUDIT on, the one-pass audit write of step 3 precedes the first phase file; the
+        audit file stays top-level, never inside a `phase-NN/` directory.
 
 ## Output file contents
 
@@ -248,8 +302,12 @@ the form above, with these additions:
    its phase N of M?
 9. Is the `Autonomy: <level> (<setting>)` line present in every file, and does every
    `Decided (auto):` line carry its factors and score?
+10. Under AUDIT on: is every ASK'd or scored item of this run buffered as a record, and is the
+    audit write ordered before the prompt file(s)?
 
 If any answer is no, fix it before writing; then write and report **every** path you wrote
 (including the `.zi/{slug}/` prefix) to the host — the one `prompt.md`, or every
-`phase-NN/prompt.md` in execution order. What happens next — printing a follow-up command, or
-continuing to the plan stage — is the host's business, not this stage's.
+`phase-NN/prompt.md` in execution order. The reported paths are the **prompt file(s) only**:
+under AUDIT on the audit file `.zi/{slug}/decisions.md` is written but never reported to the
+host — it is an audit file, not a pipeline artifact. What happens next — printing a follow-up
+command, or continuing to the plan stage — is the host's business, not this stage's.

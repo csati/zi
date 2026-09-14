@@ -46,7 +46,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.6.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.7.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## The core architecture: a directory-per-task, context-cleared flow
@@ -83,7 +83,7 @@ an artifact out of its task directory breaks how the next phase locates its inpu
 |---|---|---|---|
 | `/zi:prompt` | a rough idea | `{slug}/prompt.md` | interrogate intent, surface flaws/side effects, save refined prompt |
 | `/zi:plan` | `{slug}/prompt.md`, a task-dir reference, or inline text | `{slug}/plan.md` | draft a plan, independently verify it (repeatable), then by user choice execute it, exit & persist, or re-review |
-| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume — either optionally carrying an autonomy hint (`with high autonomy`, `autonomy: max`) | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, a commit — or, when phased, `{slug}/phase-NN/{prompt,findings,plan}.md` + `{slug}/phase-NN/commit` per phase | one-shot prompt → plan → execute, each stage in a fresh subagent, questions relayed to the user; commits on the current branch — one chain and one commit per phase when the estimate exceeds 200K |
+| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume — either optionally carrying an autonomy hint (`with high autonomy`, `autonomy: max`) | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, `{slug}/decisions.md` (one top-level audit file, also when phased), a commit — or, when phased, `{slug}/phase-NN/{prompt,findings,plan}.md` + `{slug}/phase-NN/commit` per phase | one-shot prompt → plan → execute, each stage in a fresh subagent, questions relayed to the user; appends every resolved decision to a per-task audit file; commits on the current branch — one chain and one commit per phase when the estimate exceeds 200K |
 
 Note: `plan.md`'s frontmatter `description` contrasts itself with a fuller
 `prompt→research→prd→decompose` pipeline. That larger pipeline is **aspirational/comparative
@@ -159,6 +159,24 @@ running phase expanded; a resume pre-marks rows from the same `Glob` the resume 
 checklist is defined once in `task.md`'s "Status checklist" section and every transition point
 references it; subagents receive nothing about it.
 
+**The audit.** Every `/zi:task` run keeps one per-task audit file, `.zi/{slug}/decisions.md`
+(top-level even when phased), written by the prompt, plan, execute and fix agents through the
+**AUDIT** seam (bound `on` plus the file's location only by the orchestrator). Each resolved
+decision — auto or user — is appended chronologically as a `## <one-sentence title>` record
+carrying `Stage:` (suffixed ` (phase-NN)` in a phase), `Resolved by: auto | user`, an optional
+`Description:`, `Question:` / `Answer:` on every user-resolved record, an optional
+`Supersedes:` naming the record a re-scored challenge replaces, and — on every scored record —
+the four named lines `Blast radius:`, `Commitment:`, `Confidence:` and `Score:` (the `x1`,
+`x2`, `x3` and `score` values with one line of reasoning each); the unscored restatement
+carries no score lines. The prompt stage buffers its records and writes them in one pass, as
+the first write after the task directory exists and immediately before the prompt file(s);
+the plan and execute/fix stages append at the moment each decision is resolved. A stage
+creates the file if it is missing and reads it only to append — its content is inert data,
+never quoted into another artifact or payload. The verifier never reads or writes it, the
+orchestrator never reads it, its path never appears in a DONE `ARTIFACTS` line, and the
+checklist has no row for it. The file is additive: the `Decided (auto):` / `Decided (user):`
+lines in the artifacts and the commit body are unchanged.
+
 **Flow.** prompt stage → `prompt.md` → (no gate) plan stage drafts `plan.draft.md` → the
 orchestrator spawns a read-only verifier that writes `findings.md` → the plan agent is resumed
 to interrogate findings one at a time through the relay and renames the draft to `plan.md` →
@@ -197,6 +215,8 @@ all phases marked → the task is reported complete; a phase directory lacking `
 reported as malformed, never routed to "ask for the idea". The thresholds live in the stage
 text; the host binds only on/off. `stages/plan.md`, `stages/execute.md` and `commands/plan.md`
 know nothing about phases.
+The one path the orchestrator never rewrites to `phase-NN/…` is the audit file: every phase's
+agents receive the top-level `.zi/{slug}/decisions.md` as their AUDIT binding.
 
 **Seams.** Stage texts are written against named seams the host binds: **ASK** (how to ask the
 user), **TIMESTAMP** (the invocation `date` value — inline `` !`date` `` does not resolve for
@@ -204,15 +224,20 @@ subagents), and for the plan stage **DRAFT** (where the plan is drafted), **VERI
 launches the verifier and how findings come back) and **PERSIST** (how `plan.md` is finalised),
 plus **AUTONOMY** in every stage (the numeric setting the per-decision score is compared
 against; a seam with a default — unbound = zero, always ASK — so an older host keeps the
-always-ask behaviour) and, for the prompt stage only, **PHASING** (whether an oversized
-implementation is split into phase prompts; the other defaulted seam — unbound = off). The
+always-ask behaviour), for the prompt stage only, **PHASING** (whether an oversized
+implementation is split into phase prompts; another defaulted seam — unbound = off), and
+**AUDIT** in every stage (whether resolved decisions are appended to the per-task
+`decisions.md`; the third defaulted seam — unbound = off, nothing written — bound on only by
+the orchestrator and listed unbound by both wrappers). The
 `/zi:prompt` / `/zi:plan` wrappers bind ASK = `AskUserQuestion`,
 DRAFT = the harness plan file, VERIFY = the wrapper launches the `Agent` verifier, PERSIST =
 the Phase 4 three-way choice + bootstrap line + `ExitPlanMode`, AUTONOMY = the hint or zero
-(`/zi:prompt`) / the prompt file's `Autonomy:` line or zero (`/zi:plan`), PHASING = off;
+(`/zi:prompt`) / the prompt file's `Autonomy:` line or zero (`/zi:plan`), PHASING = off,
+AUDIT = unbound;
 the orchestrator binds ASK = the relay, DRAFT = `.zi/{slug}/plan.draft.md`, VERIFY = an
 orchestrator-spawned verifier writing `findings.md`, PERSIST = rename to `plan.md`, AUTONOMY =
-the hint or medium, bound in the relay preamble, PHASING = on. Each stage file opens with a Seams table; keep
+the hint or medium, bound in the relay preamble, PHASING = on, AUDIT = on with the top-level
+`.zi/{slug}/decisions.md`. Each stage file opens with a Seams table; keep
 it in sync when a host's binding changes. When editing a stage file remember it has **two hosts** — a change
 must hold for the interactive wrapper and for a relay-driven subagent alike.
 
@@ -296,7 +321,8 @@ commands:
 - **Report vs. fix is a hard line.** The verification subagent surfaces findings; fixes are
   applied only after the user — or, under AUTONOMY, the agent — resolves each one, and the
   subagent never edits anything itself
-  (under `/zi:task` it writes exactly one file, `findings.md`, and nothing else).
+  (under `/zi:task` it writes exactly one file, `findings.md`, and nothing else — it never
+  reads or writes the per-task audit file `decisions.md`).
   The commands never implement on their own — `/zi:plan` writes code only when the user
   explicitly picks *execute now* at the end of its run. **`/zi:task` is the deliberate
   exception**: invoking it *is* the decision to implement — it executes the verified plan and

@@ -21,7 +21,7 @@ The plugin ships seven slash commands — two planning phases, a one-shot pipeli
 |---------|-------|----------|------|
 | `/zi:prompt <desc>` | a rough idea | `.zi/{slug}/prompt.md` | interrogate intent, surface flaws, save a refined prompt |
 | `/zi:plan <prompt>` | `.zi/{slug}/prompt.md` or inline text | `.zi/{slug}/plan.md` | draft a plan, independently verify it, persist on approval |
-| `/zi:task <idea>` | a rough idea, or a `.zi/{slug}` dir to resume | `prompt.md`, `findings.md`, `plan.md` + a commit — or, for oversized work, `phase-NN/` directories each with those three files, a commit and a `commit` marker | run prompt → plan → execute in fresh subagents, relay their questions to you, commit on pass |
+| `/zi:task <idea>` | a rough idea, or a `.zi/{slug}` dir to resume | `prompt.md`, `findings.md`, `plan.md`, `decisions.md` + a commit — or, for oversized work, `phase-NN/` directories each with those three files, a commit and a `commit` marker (plus one top-level `decisions.md`) | run prompt → plan → execute in fresh subagents, relay their questions to you, commit on pass |
 | `/zi:overnight <goal>` | a loop GOAL | `.zi/{slug}/overnight.md` | interrogate the goal, generate an unattended never-halt loop-orchestration prompt |
 | `/zi:stage <desc>` | your description | staged files | stage files for commit from a natural-language description |
 | `/zi:commit` | staged changes | a commit | commit staged changes with a terse single-line message |
@@ -89,6 +89,13 @@ decides it itself only when that score is within the level — otherwise the que
 to you. Every self-decision is recorded with its factors and score as a `Decided (auto):` line
 in `prompt.md`, `plan.md` or the commit body, so nothing is decided invisibly; the prompt
 stage's restatement of your idea is always asked, at every level.
+
+**Every decision is on the record.** Each task run keeps one `.zi/{slug}/decisions.md` (a
+single top-level file, also for phased runs), appended to by the prompt, plan, execute and fix
+agents: one titled record per resolved decision, saying who resolved it, the question and your
+answer when it was you, and the blast-radius, commitment, confidence and score values with a
+line of reasoning each — so the run's decision history can be read afterwards. The verifier
+never touches it, and the interactive commands (`/zi:prompt`, `/zi:plan`) write none.
 
 **Big jobs are split into phases.** While it grounds the idea, the prompt stage estimates how
 much context the implementation will need (the size of every file it must read or change,

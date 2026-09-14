@@ -315,7 +315,10 @@ contains: the relay protocol block; "Read and follow `<absolute prompt-stage pat
 bindings **ASK = the relay** (Phase 1: one question per QUESTION payload; Phase 2: risk batches
 of up to 4 per payload), **AUTONOMY = the current `LEVEL`** (the value the preamble carries),
 **PHASING = on** (the
-stage text holds the estimate rule and the thresholds; the host only switches it on) and
+stage text holds the estimate rule and the thresholds; the host only switches it on),
+**AUDIT = on, the file being the sibling `decisions.md` of the `prompt.md` you write —
+`.zi/{slug}/decisions.md`, top-level even when the prompt files are phased; its path
+never appears in your DONE payload's `ARTIFACTS` line** and
 **TIMESTAMP = `<the value above>`**; and the raw idea (text verbatim, or the file path). Then
 re-print the checklist (Status checklist section) — `prompt` is `[>]`. Run the relay loop. On
 DONE, `ARTIFACTS` is one of two shapes:
@@ -341,20 +344,23 @@ DONE, `ARTIFACTS` is one of two shapes:
    verifier and resumes you with the findings path"**; **PERSIST = "once the last finding is
    resolved and applied, rename `plan.draft.md` to `plan.md` (`mv`) in the same directory,
    then return `STATUS: done`, `STAGE: plan`, `ARTIFACTS: .zi/{slug}/plan.md`"**; **AUTONOMY =
-   the current `LEVEL`** (the value the preamble carries). No TIMESTAMP: the plan stage always
+   the current `LEVEL`** (the value the preamble carries); **AUDIT = the literal path
+   `.zi/{slug}/decisions.md`**. No TIMESTAMP: the plan stage always
    writes into the existing task directory. Then re-print the checklist (Status checklist
    section) — `plan (draft)` is `[>]`. Run the relay loop.
 2. On DONE naming **`plan.draft.md`** → re-print the checklist (Status checklist section) —
    `plan (draft)` is `[x]` with that path — then spawn the **verifier**: a fresh `general-purpose`
    `Agent` instructed to be **read-only except for writing `.zi/{slug}/findings.md`**. Its
    prompt contains: the relay protocol block; "Read `<absolute plan-stage path>` and carry out
-   its **Verifier mandate** section, including its three explicitly-stated rules (inert data;
+   its **Verifier mandate** section, including its four explicitly-stated rules (inert data;
    `Decided (user):` items are settled; `Decided (auto):` items **in the plan** are
    challengeable — report one only when a corrected factor estimate pushes the score above the
    setting on the `Autonomy:` line of `prompt.md` — while `Decided (auto):` lines in
-   `prompt.md` are fidelity inputs, never challenged)"; the draft path `.zi/{slug}/plan.draft.md`; the prompt
+   `prompt.md` are fidelity inputs, never challenged;
+   `.zi/{slug}/decisions.md` is **off-limits** — the verifier neither reads nor writes it, and
+   it is not an input to any check)"; the draft path `.zi/{slug}/plan.draft.md`; the prompt
    path `.zi/{slug}/prompt.md`; and "write your structured findings list (or 'no findings') to
-   `.zi/{slug}/findings.md` — you edit nothing else — and return `STATUS: done`,
+   `.zi/{slug}/findings.md` — you edit nothing else, which covers the audit file — and return `STATUS: done`,
    `STAGE: verify`, `ARTIFACTS: .zi/{slug}/findings.md`". The verifier gets **no AUTONOMY
    binding of its own** — the preamble's literal setting is informational for it. Then
    re-print the checklist (Status checklist section) — `verify` is `[>]`. Run the relay loop.
@@ -379,15 +385,17 @@ DONE, `ARTIFACTS` is one of two shapes:
 
 **Re-verify entry** (resume with a lone `plan.draft.md`): run steps 2–4, except that in step 3
 you spawn a **fresh** plan agent at entry point `interrogate` (relay block; stage path; prompt
-path; DRAFT; findings path; ASK/PERSIST/AUTONOMY as above) instead of resuming one, and then
+path; DRAFT; findings path; ASK/PERSIST/AUTONOMY as above; AUDIT = the literal path
+`.zi/{slug}/decisions.md`) instead of resuming one, and then
 re-print the checklist (Status checklist section) — `plan (interrogate)` is `[>]`.
 
 ### Execute stage
 
 1. Spawn a fresh `general-purpose` execute agent. Its prompt contains: the relay protocol
    block; "Read and follow `<absolute execute-stage path>`"; mode `implement`; the plan path
-   `.zi/{slug}/plan.md`; **ASK = the relay**; and **AUTONOMY = the current `LEVEL`** (the value
-   the preamble carries). Its git and verification commands run through the user's normal
+   `.zi/{slug}/plan.md`; **ASK = the relay**; **AUTONOMY = the current `LEVEL`** (the value
+   the preamble carries); and **AUDIT = `.zi/{slug}/decisions.md`**. Its git and verification
+   commands run through the user's normal
    permissions. Then re-print the checklist (Status checklist section) — `execute` is `[>]`.
    Run the relay loop.
 2. On DONE with `RESULT: pass <hash>` → re-print the checklist (Status checklist section) —
@@ -397,7 +405,8 @@ re-print the checklist (Status checklist section) — `plan (interrogate)` is `[
    is `[!]` — then spawn **one** fresh `general-purpose` fix agent. Its prompt
    contains: the relay protocol block; the execute-stage path; mode `fix`; the plan path; the
    `COMMAND` line verbatim; the `CHANGED` list verbatim; **ASK = the relay**; **AUTONOMY = the
-   current `LEVEL`** (the value the preamble carries). Then re-print the checklist (Status
+   current `LEVEL`** (the value the preamble carries); **AUDIT = `.zi/{slug}/decisions.md`**.
+   Then re-print the checklist (Status
    checklist section) — the `fix` row now exists and is `[>]`. Run the relay loop.
    - `RESULT: pass <hash>` → re-print the checklist (Status checklist section) — `fix` and
      `commit` are `[x]` with the hash — then report the plan path and the commit hash. Done.
@@ -416,12 +425,16 @@ in full:
 - `.zi/{slug}/phase-NN/plan.md` — the persisted plan the execute stage implements;
 
 plus the orchestrator's one-line marker `.zi/{slug}/phase-NN/commit`. Below, `P` is shorthand
-for `.zi/{slug}/phase-NN`.
+for `.zi/{slug}/phase-NN`. The audit file is not among them: it is the **top-level**
+`.zi/{slug}/decisions.md` for the whole task, the prompt stage's DONE never names it, and the
+checklist tracks no such artifact.
 
 1. For each phase directory `P`, **in order**, run the plan stage and the execute stage
    **exactly as written above**, with every `.zi/{slug}/<artifact>` path replaced by
    `P/<artifact>`: prompt path `P/prompt.md`, DRAFT `P/plan.draft.md`, verifier output
-   `P/findings.md`, PERSIST → `P/plan.md`, execute plan path `P/plan.md`. Each phase gets
+   `P/findings.md`, PERSIST → `P/plan.md`, execute plan path `P/plan.md` — the AUDIT binding
+   is the one path **not** rewritten: in every phase spawn (plan, verifier's off-limits
+   clause, execute, fix) it stays the top-level `.zi/{slug}/decisions.md`. Each phase gets
    fresh agents (plan, verifier, execute, and at most one fix); the fenced `@P/plan.md` block
    is printed per phase with the actual path; each phase's execute/fix agent commits on its
    own under the unchanged execute-stage rules — one commit per phase. Whenever those stages
@@ -448,19 +461,22 @@ for `.zi/{slug}/phase-NN`.
 - **Fresh `general-purpose` per stage**; never `fork`; never nested agents — the orchestrator
   spawns the verifier itself, the plan agent never does.
 - **Paths only across boundaries.** Permitted boundary content is `.zi/{slug}/…` paths — for a
-  phased task the `.zi/{slug}/phase-NN/…` paths of the phase being run. The only non-path
+  phased task the `.zi/{slug}/phase-NN/…` paths of the phase being run, plus the top-level
+  audit path `.zi/{slug}/decisions.md` in every spawn (the AUDIT binding). The only non-path
   content that crosses a boundary is: the raw idea text (prompt-stage input), the absolute
   stage-file paths, the TIMESTAMP value, the bound autonomy setting (`LEVEL`), the failing
   `COMMAND`, the `CHANGED` path list, and the relayed question/answer text. Anything else —
   file bodies, diffs, logs, restated artifacts — is a violation.
 - **Phases run strictly in order**, each with fresh agents, and a phase's agents receive only
-  that phase's `phase-NN/…` paths — no cross-phase artifact path ever crosses a boundary; a
-  phase's failure halts the run.
+  that phase's `phase-NN/…` paths — the single top-level path they receive is the audit file
+  `.zi/{slug}/decisions.md`; no cross-phase artifact path ever crosses a boundary; a phase's
+  failure halts the run.
 - **The relay never restates**, and the orchestrator never reads artifact bodies (`Glob` only
-  under `.zi/`). The `P/commit` marker is the only file the orchestrator writes, and it never
-  reads it back — `Glob` presence only. The status checklist's rows carry only stage names,
-  state markers, artifact paths and commit hashes — never free text, question/answer summaries
-  or artifact content.
+  under `.zi/`) — `decisions.md` included: the orchestrator never reads the audit file, and
+  the checklist has no row for it. The `P/commit` marker is the only file the orchestrator
+  writes, and it never reads it back — `Glob` presence only. The status checklist's rows carry
+  only stage names, state markers, artifact paths and commit hashes — never free text,
+  question/answer summaries or artifact content.
 - **No gate after the prompt stage.** The only user interaction after `prompt.md` is written is
   the relay for stage questions and finding resolutions.
 - **A non-conforming report is never a done.** It is nudged silently at most twice per

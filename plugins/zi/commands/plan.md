@@ -80,9 +80,10 @@ proceed — never explore or draft outside plan mode.
 |---|---|
 | ASK | `AskUserQuestion` — one finding per call: the recommended fix first (labelled "(Recommended)"), any meaningful alternative, and an explicit **"Keep as-is"**; the tool's "Other" path is the custom-resolution path. |
 | DRAFT | the **harness plan file** named in the plan-mode system message; draft with `Write`, apply finding resolutions with `Edit`. |
-| VERIFY | this command launches **one fresh subagent** with the `Agent` tool, using a read-only agent type (`Explore`, or a `general-purpose` agent explicitly instructed to stay read-only and only report), with no access to this conversation. It receives exactly the harness plan file path and the resolved prompt (file path, or inline text verbatim) plus the stage's **Verifier mandate** — including its three explicitly-repeated rules — and its findings arrive in its report text. It reads the autonomy level from the prompt's `Autonomy:` line per the mandate (absent, or inline text → zero). |
+| VERIFY | this command launches **one fresh subagent** with the `Agent` tool, using a read-only agent type (`Explore`, or a `general-purpose` agent explicitly instructed to stay read-only and only report), with no access to this conversation. It receives exactly the harness plan file path and the resolved prompt (file path, or inline text verbatim) plus the stage's **Verifier mandate** — including its four explicitly-repeated rules — and its findings arrive in its report text. It reads the autonomy level from the prompt's `Autonomy:` line per the mandate (absent, or inline text → zero). |
 | PERSIST | Phase 4 below: the three-way choice, the bootstrap line, `ExitPlanMode`, then the Persistence rules. |
 | AUTONOMY | the `Autonomy: <level> (<setting>)` line of the prompt file the argument resolved to; **zero (0.0)** when the line is absent or the prompt is inline text (no provenance word — this host has no restatement and detects no hint). It governs decisions inside the stage's Phases 1–3 and, on **Execute now**, implementation-time decisions; the Phase 4 choice itself is a host gate (see below). |
+| AUDIT | **unbound** — the stage default applies (off, nothing written); interactive runs keep no audit file. |
 
 Entry point: `draft` (the stage's Phase 1). Run the stage's Phases 1–3, then come back here
 for Phase 4.
