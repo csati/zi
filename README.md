@@ -121,7 +121,8 @@ the later phases. **Start `/zi:task` from a fresh session** — the orchestrator
 hold nothing but the run.
 
 `/zi:prompt`, `/zi:plan` and `/zi:task` all read the same stage text from `plugins/zi/stages/`,
-so the interactive commands and the pipeline cannot drift apart.
+so the interactive commands and the pipeline cannot drift apart; the verifier gets its own
+`verify.md` so it never reads — or pays for — the planner's text.
 
 ### `/zi:overnight` — generate an overnight loop prompt
 
@@ -184,7 +185,7 @@ zi/                                   ← repo root = the "ncs-plugins" marketpl
 ├── plugins/zi/                       ← the plugin itself
 │   ├── .claude-plugin/plugin.json
 │   ├── commands/   prompt, plan, task, overnight, stage, commit, locate
-│   └── stages/     prompt, plan, execute   ← shared stage text read by prompt, plan and task
+│   └── stages/     prompt, plan, verify, execute   ← shared stage text read by prompt, plan and task
 ├── README.md
 ├── CLAUDE.md
 └── LICENSE

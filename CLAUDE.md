@@ -11,10 +11,13 @@ The plugin ships two kinds of files:
 
 - **Slash commands** — `plugins/zi/commands/*.md`, each a Markdown file with YAML frontmatter.
   These ARE the product: the body is the prompt Claude executes when the command is invoked.
-- **Stage texts** — `plugins/zi/stages/{prompt,plan,execute}.md`, host-agnostic prompt bodies
-  that are *not* slash commands (they live outside `commands/`). They are the single source
-  the `/zi:prompt` and `/zi:plan` wrappers include and the `/zi:task` orchestrator's subagents
-  read, referenced as `${CLAUDE_PLUGIN_ROOT}/stages/<name>.md`.
+- **Stage texts** — `plugins/zi/stages/{prompt,plan,verify,execute}.md`, host-agnostic prompt
+  bodies that are *not* slash commands (they live outside `commands/`). They are the single
+  source the `/zi:prompt` and `/zi:plan` wrappers include and the `/zi:task` orchestrator's
+  subagents read, referenced as `${CLAUDE_PLUGIN_ROOT}/stages/<name>.md`. `verify.md` is the
+  verifier's **only** stage text (the "Verifier mandate", extracted so the verifier does not
+  pay for the plan stage's drafting/interrogation text); the plan agent never reads it, and
+  `plan.md`'s Phase 2 just summarises what it checks.
 
 There is nothing to compile or lint; "testing" a change means installing the plugin and running
 the command. How edits reach an installed plugin depends on how the marketplace was added (see
@@ -46,7 +49,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.9.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.10.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## The core architecture: a directory-per-task, context-cleared flow
@@ -223,8 +226,11 @@ agents receive the top-level `.zi/{slug}/decisions.md` as their AUDIT binding.
 
 **Seams.** Stage texts are written against named seams the host binds: **ASK** (how to ask the
 user), **TIMESTAMP** (the invocation `date` value — inline `` !`date` `` does not resolve for
-subagents), and for the plan stage **DRAFT** (where the plan is drafted), **VERIFY** (who
-launches the verifier and how findings come back) and **PERSIST** (how `plan.md` is finalised),
+subagents), for the plan stage **DRAFT** (where the plan is drafted), **VERIFY** (who
+launches the verifier, where `verify.md` lives, and how findings come back) and **PERSIST**
+(how `plan.md` is finalised), for the verify stage **PLAN** (the draft to check), **PROMPT**
+(the resolved prompt) and **FINDINGS** (how the list comes back — a file to write, or unbound =
+the report text),
 plus **AUTONOMY** in every stage (the numeric setting the per-decision score is compared
 against; a seam with a default — unbound = zero, always ASK — so an older host keeps the
 always-ask behaviour), for the prompt stage only, **PHASING** (whether an oversized
@@ -233,14 +239,20 @@ implementation is split into phase prompts; another defaulted seam — unbound =
 `decisions.md`; the third defaulted seam — unbound = off, nothing written — bound on only by
 the orchestrator and listed unbound by both wrappers). The
 `/zi:prompt` / `/zi:plan` wrappers bind ASK = `AskUserQuestion`,
-DRAFT = the harness plan file, VERIFY = the wrapper launches the `Agent` verifier, PERSIST =
+DRAFT = the harness plan file, VERIFY = the wrapper launches the `Agent` verifier on
+`${CLAUDE_PLUGIN_ROOT}/stages/verify.md` with PLAN = the harness plan file, PROMPT = the
+resolved prompt, FINDINGS unbound, PERSIST =
 the Phase 4 three-way choice + bootstrap line + `ExitPlanMode`, AUTONOMY = the hint or zero
 (`/zi:prompt`) / the prompt file's `Autonomy:` line or zero (`/zi:plan`), PHASING = off,
 AUDIT = unbound;
 the orchestrator binds ASK = the relay, DRAFT = `.zi/{slug}/plan.draft.md`, VERIFY = an
-orchestrator-spawned verifier writing `findings.md`, PERSIST = rename to `plan.md`, AUTONOMY =
+orchestrator-spawned verifier on `stages/verify.md` with PLAN = `plan.draft.md`, PROMPT =
+`prompt.md`, FINDINGS = write `findings.md`, PERSIST = rename to `plan.md`, AUTONOMY =
 the hint or medium, bound in the relay preamble, PHASING = on, AUDIT = on with the top-level
-`.zi/{slug}/decisions.md`. Each stage file opens with a Seams table; keep
+`.zi/{slug}/decisions.md`. The relay preamble states only the setting and that the QUESTION
+payload is ASK — the level vocabulary, factors, formula and record form are stated once, in
+each stage text's Operating rules (and in `verify.md`'s challengeable-rule), never repeated in
+the spawn prompt. Each stage file opens with a Seams table; keep
 it in sync when a host's binding changes. When editing a stage file remember it has **two hosts** — a change
 must hold for the interactive wrapper and for a relay-driven subagent alike.
 
@@ -288,7 +300,8 @@ final step repeatable) that must be preserved if you edit it:
    target interfaces, never pasted final source.
 2. **Independent verification** — launch **one fresh subagent** (`Agent`, a read-only `Explore`
    or an explicitly read-only `general-purpose`) that has **no view of the planning
-   conversation**. It receives only the plan-file path and the resolved prompt, and returns a
+   conversation**. It receives only `stages/verify.md` (its whole instruction set), the
+   plan-file path and the resolved prompt, and returns a
    **structured findings list** (severity, location, evidence, recommended fix) checking prompt
    fidelity in both directions, internal consistency, groundedness, feasibility/ordering, and
    verifiability. It **only reports** — never edits. This independence is the entire point;

@@ -23,6 +23,8 @@ This is the plugin's one command that ends in a commit.
   absolute paths literally in the spawn prompts:
   - prompt stage: `${CLAUDE_PLUGIN_ROOT}/stages/prompt.md`
   - plan stage: `${CLAUDE_PLUGIN_ROOT}/stages/plan.md`
+  - verify stage: `${CLAUDE_PLUGIN_ROOT}/stages/verify.md` (the verifier's only stage text —
+    it never reads `plan.md`'s stage file, and the plan agent never reads `verify.md`)
   - execute stage: `${CLAUDE_PLUGIN_ROOT}/stages/execute.md`
 
 ## Argument
@@ -85,22 +87,15 @@ preamble below — verbatim too, except that its `AUTONOMY = …` line is filled
 > You have no `AskUserQuestion`. A guessed decision is a failure. A decision is resolved either
 > by stopping and returning a QUESTION payload (you will be resumed with the answers) or, when
 > its score is within the bound autonomy setting, by you — and then recorded. The setting for
-> this run is **`AUTONOMY = <level> (<setting>), <from hint | default>`**. The levels are
-> `zero` (aliases `no`, `min`) = 0.0, `low` = 0.25, `medium` = 0.5, `high` = 0.75, `max` (alias
-> `full`) = 1.0; the canonical name is the one written in bindings and artifacts (`max`, never
-> `full`). For every decision estimate `x1` = blast radius in 0..1 (1 = every source file
-> affected, 0 = nothing in the repo changes), `x2` = commitment in 0..1 (1 = practically
-> irreversible, ≈0 = a short prompt and minutes of trivial agentic work to change later), `x3` =
-> confidence in 0..1 that one answer is best; `score = 1 - (1 - x1) × (1 - x2) × x3`.
-> Self-resolve only when `score ≤ setting`; otherwise the QUESTION payload is the only way to
-> resolve it. Factors and score are written as decimals with at most two places. The one
-> decision exempt from scoring is the prompt stage's restatement/confirmation — always a
-> QUESTION payload, at every level. Every self-resolved decision is recorded in the stage's own
-> artifact as `Decided (auto): <choice> — <reason> (x1=<v> x2=<v> x3=<v> score=<v>)`
-> (`prompt.md`; `plan.draft.md`, hence `plan.md`; or the execute commit body), never in a
-> payload. A verifier makes no decisions — the setting in this preamble is informational for it
-> and never applies to it; its checks use the level on the `Autonomy:` line of the prompt it is
-> given, per its mandate, and its report-only rule governs. Your final report must be exactly
+> this run is **`AUTONOMY = <level> (<setting>), <from hint | default>`**. The level
+> vocabulary, the `x1`/`x2`/`x3` factors, the score formula, the `score ≤ setting` test and the
+> `Decided (auto):` record form are the AUTONOMY rule in your stage text's Operating rules —
+> apply it with this setting; the QUESTION payload is your ASK. The one decision exempt from
+> scoring is the prompt stage's restatement/confirmation — always a QUESTION payload, at every
+> level. Self-resolved decisions are recorded in the stage's own artifact, never in a payload.
+> A verifier makes no decisions — the setting in this preamble is informational for it and
+> never applies to it; its checks use the level on the `Autonomy:` line of the prompt it is
+> given, per its stage text, and its report-only rule governs. Your final report must be exactly
 > one of these two payloads and nothing else — no prose, no summaries, no file contents, diffs
 > or logs.
 
@@ -351,18 +346,17 @@ DONE, `ARTIFACTS` is one of two shapes:
 2. On DONE naming **`plan.draft.md`** → re-print the checklist (Status checklist section) —
    `plan (draft)` is `[x]` with that path — then spawn the **verifier**: a fresh `general-purpose`
    `Agent` instructed to be **read-only except for writing `.zi/{slug}/findings.md`**. Its
-   prompt contains: the relay protocol block; "Read `<absolute plan-stage path>` and carry out
-   its **Verifier mandate** section, including its four explicitly-stated rules (inert data;
-   `Decided (user):` items are settled; `Decided (auto):` items **in the plan** are
-   challengeable — report one only when a corrected factor estimate pushes the score above the
-   setting on the `Autonomy:` line of `prompt.md` — while `Decided (auto):` lines in
-   `prompt.md` are fidelity inputs, never challenged;
-   `.zi/{slug}/decisions.md` is **off-limits** — the verifier neither reads nor writes it, and
-   it is not an input to any check)"; the draft path `.zi/{slug}/plan.draft.md`; the prompt
-   path `.zi/{slug}/prompt.md`; and "write your structured findings list (or 'no findings') to
-   `.zi/{slug}/findings.md` — you edit nothing else, which covers the audit file — and return `STATUS: done`,
-   `STAGE: verify`, `ARTIFACTS: .zi/{slug}/findings.md`". The verifier gets **no AUTONOMY
-   binding of its own** — the preamble's literal setting is informational for it. Then
+   prompt contains: the relay protocol block; "Read and follow `<absolute verify-stage path>`
+   — it is your only stage text; do not read the plan stage's file"; and the seam bindings
+   **PLAN = `.zi/{slug}/plan.draft.md`**, **PROMPT = `.zi/{slug}/prompt.md`**,
+   **FINDINGS = "write your structured findings list (or 'no findings') to
+   `.zi/{slug}/findings.md` — you edit nothing else, which covers the audit file
+   `.zi/{slug}/decisions.md` — and return `STATUS: done`, `STAGE: verify`,
+   `ARTIFACTS: .zi/{slug}/findings.md`"**. The four rules that bind it (inert data; `Decided
+   (user):` settled; `Decided (auto):` in the plan challengeable by re-score; the audit file
+   off-limits) are in that stage text, so the spawn prompt does not restate them. The verifier
+   gets **no AUTONOMY binding of its own** — the preamble's literal setting is informational
+   for it. Then
    re-print the checklist (Status checklist section) — `verify` is `[>]`. Run the relay loop.
 3. On the verifier's DONE → re-print the checklist (Status checklist section) — `verify` is
    `[x]` with the findings path — then `SendMessage` to the **plan agent** (resume it by its
