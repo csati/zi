@@ -44,13 +44,17 @@ intent is confirmed and every raised risk is settled does it write a tight, self
 spec to `.zi/{slug}/prompt.md` — the single input the next phase reads from a fresh context.
 An autonomy hint in the argument (`with high autonomy`, `autonomy: max`) is accepted — the
 default is zero, so an unhinted run asks every question as before — and `prompt.md` carries
-the resulting `Autonomy:` line that `/zi:plan` reads.
+the resulting `Autonomy:` line that `/zi:plan` reads. The spec ends with a `## Grounding`
+manifest — every file it verified, with its role (`read` / `modify` / `create`) and the
+symbols or line range that matter — so the plan stage starts from targeted reads instead of
+rediscovering the repo.
 
 ### `/zi:plan` — draft and verify the plan
 
 Takes a prompt — a `.zi/{slug}/prompt.md` file, a task-directory reference, or inline text —
 and drafts a concrete implementation plan in plan mode, grounded in the real files, modules,
-and build/test/lint commands of your repo. It then launches a **fresh, independent subagent**
+and build/test/lint commands of your repo, starting from the prompt's grounding manifest and
+ending with its own `## Files` manifest that the verifier and the executor read first. It then launches a **fresh, independent subagent**
 that never sees the planning conversation to verify the plan against both the prompt and the
 codebase — checking prompt fidelity, internal consistency, groundedness, feasibility, ordering,
 and verifiability — and returns a structured findings list. You work those findings **one at a

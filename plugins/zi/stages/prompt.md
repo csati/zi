@@ -51,7 +51,13 @@ AUTONOMY binding (provenance `from hint`); no hint → the host's binding stands
   beyond read-only exploration and the write of the output file(s).
 - Ground before asking: when the idea touches the repo, verify reality with Read/Grep/Glob
   before forming a question. Resolve in code anything the code can answer; only ask the user
-  for intent, preference, and decisions.
+  for intent, preference, and decisions. Keep a running list of every path you verified and
+  the role you expect it to play — it becomes the spec's `## Grounding` manifest, so the
+  discovery you pay for here is not repeated by every later stage.
+- **Read in ranges.** When you already know the symbol or line range you need — from a
+  manifest entry, a `Grep` hit, or an earlier read — `Read` with `offset`/`limit` around it
+  rather than the whole file. Read a file whole only when it is small (roughly under 300
+  lines) or you genuinely need all of it.
 - **A guessed decision is a failure; a decision is resolved either via ASK or, when its score
   is within the AUTONOMY setting, by you — and then recorded.** AUTONOMY is a numeric setting on
   a five-step scale — **levels**: `zero` (aliases `no`, `min`) = 0.0, `low` = 0.25,
@@ -137,17 +143,20 @@ to act on.
    "Confirm — autonomy: high (Recommended)", so the chosen label is itself a hint a host can
    read back. This confirmation is asked at every level.
 2. Ground first: verify real paths, symbols, and conventions with Read/Grep/Glob before
-   forming questions, so questions are specific to this repo, never generic.
+   forming questions, so questions are specific to this repo, never generic. Record what you
+   verify as manifest entries (Output file contents → `## Grounding`): the path, whether the
+   implementation will `read`, `modify` or `create` it, and the symbols or line range that
+   matter.
 
    **PHASING on only** — while grounding, estimate the implementation's execute-context cost:
-   sum the byte sizes of every file the implementation must read or modify (`wc -c` or the
-   Read tool's view; count each file once), convert at ≈4 bytes per token, and multiply by a
+   sum the byte sizes of every file in the manifest with role `read` or `modify` (`wc -c` or
+   the Read tool's view; count each file once), convert at ≈4 bytes per token, and multiply by a
    fixed ×3 overhead factor for tool output, tests and iteration; the result is the **total
    estimate**. Two thresholds apply: a total above **200K** tokens triggers phasing, and each
    phase must estimate at or under **100K**. The grounding-time sum is provisional: if the
    Phase-1/Phase-2 interrogation added or removed files from the read/modify set, re-sum once
    before the Phase-3 branch, and the recorded `Estimate:` line carries that final figure.
-   Under PHASING off, nothing is computed or recorded.
+   Under PHASING off, nothing is computed or recorded — but the manifest is still written.
 3. Route every decision, confirmation, and open-ended clarification through ASK — exactly
    **one question at a time, asked sequentially**, never batched. Open-ended clarifications
    still go through ASK, always carrying a "(Recommended)" option; when the suggestion's
@@ -262,6 +271,23 @@ A tight, self-contained refined prompt:
   written. Like the heading it does not count toward the sentence budget.
 - **Every resolved decision MUST appear in the spec as an explicit constraint under its fixed label.** Every decision the user resolved appears as a line with the fixed label `Decided (user): …`, with important rejected options recorded inside that line ("NOT doing X because Y"); every decision you resolved yourself appears as `Decided (auto): <choice> — <reason> (x1=<v> x2=<v> x3=<v> score=<v>)`. Each such line spends one of the per-decision extra sentences. Later phases re-derive facts from the code but NEVER re-derive your decisions, so an omitted decision is silently re-opened downstream and may be resolved differently.
 - **Any file path, symbol, or convention named in the spec MUST be one you verified exists.** Do not invent or guess anchors; if you could not verify something the spec needs, describe it generically rather than asserting a false specific.
+- **One fixed-form `## Grounding` section, always written, last in the file** — the grounding
+  manifest. One bullet per path you verified while grounding, in this exact shape:
+
+  ```
+  ## Grounding
+  - `src/auth/token.ts` — modify — `refreshToken`, `TokenStore` (L40–118)
+  - `src/auth/index.ts` — read — `export` list (L1–30)
+  - `src/auth/refresh.test.ts` — create
+  ```
+
+  Path in backticks, then the **role** — `read` (the implementation must understand it),
+  `modify` (it changes) or `create` (it does not exist yet; verify that it does not) — then,
+  for `read`/`modify`, the symbols and/or line range the work depends on. Every `read`/`modify`
+  path exists and every symbol named is one you found there; a `create` path names no symbols.
+  The manifest is **what you verified, not a promise of completeness**: it is where the plan
+  stage starts reading, and the plan stage extends it. Like the heading and the `Autonomy:`
+  line it does not count toward the sentence budget.
 - Every sentence must be load-bearing — no preamble, no restating the task, no "this document describes…". Write it as an instruction a future agent could act on directly.
 - You MAY (not must) lead the load-bearing lines with bold labels — **Scope:**, **Out of scope:**, **Must not:** — so they survive a skim; keep trivial specs as plain prose.
 
@@ -282,6 +308,12 @@ the form above, with these additions:
 - the fixed-form `Estimate:` line carries the phase's own figure and the 100K threshold —
   `Estimate: <bytes> B ÷ 4 × 3 ≈ <N>K tokens (threshold 100K)`; like the heading it does not
   count toward the budget;
+- the `## Grounding` section carries **only that phase's slice** of the manifest — the
+  entries the phase reads, modifies or creates, with the role as seen from that phase (a file
+  phase 01 creates and phase 02 extends is `create` in 01 and `modify` in 02). An entry may
+  recur across phases; the phase's `Estimate:` is summed over its own slice, and the union of
+  all slices is the full manifest — so a phase's agents never rediscover files that belong to
+  another phase;
 - every other rule above (self-contained, verified anchors, load-bearing sentences, bold labels
   optional) applies unchanged to each file.
 
@@ -291,15 +323,17 @@ the form above, with these additions:
 2. Does the spec pin every "must" dimension from the Phase-1 checklist?
 3. Is every resolved decision (and every important rejected option) recorded under its
    `Decided (user):` / `Decided (auto):` label?
-4. Is every path/symbol named in the spec one you actually verified?
+4. Is every path/symbol named in the spec one you actually verified — and is the `## Grounding`
+   manifest present, last, in the fixed form, every `read`/`modify` entry an existing path
+   with symbols you found there, every `create` entry a path that does not exist?
 5. Self-contained, within the sentence budget (20 + one per resolved decision), no process
    chatter?
 6. Have you derived the timestamp + slug and the exact output path(s)?
 7. Under PHASING on: was the estimate computed with the rule above, and is its fixed-form
    `Estimate:` line present in the file(s)?
 8. If phased: was the phase list confirmed by the user via ASK or self-confirmed at a recorded
-   score, is every phase ≤100K, does each file restate the decisions that constrain it and name
-   its phase N of M?
+   score, is every phase ≤100K, does each file restate the decisions that constrain it, name
+   its phase N of M, and carry only its own manifest slice?
 9. Is the `Autonomy: <level> (<setting>)` line present in every file, and does every
    `Decided (auto):` line carry its factors and score?
 10. Under AUDIT on: is every ASK'd or scored item of this run buffered as a record, and is the

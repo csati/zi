@@ -34,6 +34,17 @@ The host hands you:
   inside it.
 - **Ground before asserting** — verify every path, symbol, API, and command with Read/Grep/Glob
   before naming it in the plan. Nothing hallucinated or stale.
+- **Start from the manifest, don't stop at it.** When the prompt carries a `## Grounding`
+  section (the prompt stage's manifest: path — `read` | `modify` | `create` — symbols / line
+  range), begin grounding with targeted `Read`s of those entries instead of rediscovering the
+  repo with `Grep`/`Glob`. Discovery is for what the manifest does not cover — a caller, a
+  test, a config it missed — never a fresh sweep of what it already names. The manifest is
+  where you start; the code is the source of truth, and every claim in the plan is still one
+  you verified yourself.
+- **Read in ranges.** When you already know the symbol or line range you need — from a
+  manifest entry, a `Grep` hit, or an earlier read — `Read` with `offset`/`limit` around it
+  rather than the whole file. Read a file whole only when it is small (roughly under 300
+  lines) or you genuinely need all of it.
 - The verifier is a **separate, fresh** context that never sees this planning conversation.
   That independence is the entire point of the verification step — never self-review in its
   place.
@@ -105,13 +116,17 @@ Under AUDIT off nothing is written.
 
 ### Phase 1 — Draft the plan into DRAFT
 
-1. **Ground in the codebase** with Read/Grep/Glob: find the real files, modules, and patterns
-   the plan will touch, and the project's actual build / test / lint commands (from its
-   `AGENTS.md` / `CLAUDE.md`).
-2. Write a concrete implementation plan to DRAFT: the approach, the files to create/modify, the
-   ordered steps, and how the result will be verified (concrete acceptance criteria, real
-   commands). Describe *intent and target interfaces*, not pasted final source. Every path or
-   symbol named MUST be one you verified exists.
+1. **Ground in the codebase**: read the prompt's `## Grounding` entries first (range reads
+   where a line range is given), then Read/Grep/Glob only for what they do not cover — the
+   real files, modules, and patterns the plan will touch beyond the manifest, and the
+   project's actual build / test / lint commands (from its `AGENTS.md` / `CLAUDE.md`). A
+   prompt without a manifest (inline text) is grounded from scratch.
+2. Write a concrete implementation plan to DRAFT: the approach, the ordered steps, how the
+   result will be verified (concrete acceptance criteria, real commands), and the **`## Files`
+   manifest** (Plan content rules) — the prompt's manifest, corrected and extended to every
+   file the implementation reads, modifies or creates. Describe *intent and target
+   interfaces*, not pasted final source. Every path or symbol named MUST be one you verified
+   exists.
 3. Hand DRAFT to VERIFY.
 
 ### Phase 2 — Independent verification (the "Verifier mandate")
@@ -135,7 +150,16 @@ fix*. Check for:
   earlier step, an acceptance criterion that contradicts the chosen approach, or an interface
   two steps describe differently.
 - **Groundedness** — every referenced path, symbol, API, and command actually exists and
-  matches the codebase; nothing stale or hallucinated.
+  matches the codebase; nothing stale or hallucinated. Check it **targeted, not by
+  re-exploring**: for each `## Files` entry, `Grep` the named symbols in the named path (or
+  `Glob` the path) and `Read` only the enclosing region — a line range, when the entry gives
+  one; a `create` entry must not exist yet; a command is checked against the project's
+  scripts/config, not run. Read beyond the manifest only to test a specific claim of the plan
+  (a caller the plan says exists, a pattern it says it follows) — never as an open-ended sweep
+  of the repo.
+- **Manifest completeness** — every path a step of the plan names appears in `## Files` with
+  the role the step implies, and every `modify`/`create` entry is used by some step. (A path
+  a step touches that the manifest omits is the finding; do not fix it by reading around.)
 - **Feasibility & ordering** — the approach is workable, the steps are correctly ordered, and
   nothing depends on something not yet established.
 - **Verifiability** — acceptance criteria are concrete and checkable, not vague ("should be
@@ -217,6 +241,20 @@ follows — is the host's business, not this stage's.
 - **Ground every claim.** Every path, symbol, API, and command named in the plan is one you
   verified exists; if something cannot be verified, describe it generically rather than
   asserting a false specific.
+- **A `## Files` manifest, last in the plan, in the fixed form** the prompt stage uses:
+
+  ```
+  ## Files
+  - `src/auth/token.ts` — modify — `refreshToken`, `TokenStore` (L40–118)
+  - `src/auth/index.ts` — read — `export` list (L1–30)
+  - `src/auth/refresh.test.ts` — create
+  ```
+
+  Path in backticks — role `read` | `modify` | `create` — for `read`/`modify` the symbols
+  and/or line range the work depends on. It is the plan's authoritative file list: every file
+  a step reads, modifies or creates is in it, every entry was verified by you (a `create`
+  path does not exist yet), and the verifier and the executor start from it instead of
+  rediscovering the repo. Keep the ranges honest — they drive range reads downstream.
 - **Decisions are recorded.** A finding the user resolved with "Keep as-is" or a custom
   resolution is recorded in the plan as `Decided (user): …`, so a later verifier treats it as
   settled. A finding the agent resolved itself at a score within the autonomy setting is
