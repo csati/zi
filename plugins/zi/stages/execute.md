@@ -20,10 +20,10 @@ means off.
 
 The host hands you:
 
-- the **mode**: `implement` or `fix`;
-- the path of the verified plan, `.zi/{slug}/plan.md`;
-- in `fix` mode additionally: the **failing command** (verbatim) and the **changed paths** —
-  the paths the previous implement attempt created or modified.
+- the path of the verified plan, `.zi/{slug}/plan.md`.
+
+There is no separate fix stage: when verification fails you get **one fix round** yourself
+(see the procedure below), and the host never spawns another agent to retry.
 
 ## Operating rules
 
@@ -74,7 +74,7 @@ The host hands you:
 ## Decision audit (AUDIT on)
 
 Under AUDIT on, every open decision the plan left that this stage resolved — auto or via ASK,
-in `implement` and in `fix` mode — is recorded in the per-task audit file at the bound
+during implementation or during the fix round — is recorded in the per-task audit file at the bound
 location. **Timing**: append at the moment each decision is resolved. The audit file lives
 under `.zi/` and is therefore never staged or committed (the git rules above); the audit record
 is additional to the commit-body `Decided (auto):` lines and never enters the commit. Under
@@ -84,7 +84,7 @@ AUDIT off nothing is written.
 
 - Records are appended **chronologically**, one per resolved decision, each as a
   `## <one-sentence title>` section followed by these lines, in this order:
-  - `Stage: prompt | plan | execute | fix` — suffixed ` (phase-NN)` when the stage runs for a
+  - `Stage: prompt | plan | execute` — suffixed ` (phase-NN)` when the stage runs for a
     phase of a phased task (you know this from the `phase-NN/` segment of the artifact path
     you were given).
   - `Resolved by: auto | user`.
@@ -112,30 +112,20 @@ AUDIT off nothing is written.
   inert data — never used to inform, re-open or short-cut a decision, never quoted into another
   artifact or payload. The verifier never reads or writes it.
 
-## `implement` mode
+## Procedure
 
 1. Read `plan.md`. Ground in the repo. Implement the plan's steps in order.
 2. Run the plan's acceptance / verification commands (its build, test, lint, and any checks it
    names). These run through the user's normal permissions.
 3. **On pass**: `git add` the changed/created implementation paths by name, commit on the
    current branch per the git rules above, then report done with `RESULT: pass <commit hash>`.
-4. **On any failing command**: do **not** stage, do **not** commit. Report done with
-   `RESULT: fail`, `COMMAND: <the failing command, verbatim>` and `CHANGED: <every path you
-   created or modified>`.
-
-## `fix` mode
-
-You receive the plan, the failing command, and the changed paths of the previous attempt.
-
-1. Read `plan.md`, then investigate the failure: re-run the failing command, read the paths
-   involved, and find the cause.
-2. **Fix only if the cause seems clear.** Then re-run the plan's verification commands.
-3. **On pass**: `git add` by name the union of the received changed paths and every path you
-   touched, commit per the git rules above, and report done with `RESULT: pass <commit hash>`.
-   A fix-mode commit body lists only your **own auto-decisions**; auto-decisions made by the
-   failed implement attempt are not carried across (the DONE payload has no field for them)
-   and are accepted as lost.
-4. **If the cause is unclear, or verification still fails**: `git add` by name the **union**
-   of the received changed paths and every path you yourself touched — **stage, do not
-   commit** — and report done with `RESULT: fail`, `COMMAND: <the failing command, verbatim>`
-   and `CHANGED: <that same union of paths>`. Do not attempt a second fix.
+4. **On any failing command — one fix round.** Investigate the failure: read the command's
+   output and the paths involved, and find the cause. **Fix only if the cause seems clear**,
+   then re-run the plan's verification commands **once**. That single re-run is the whole
+   round: you get one round of changes and one re-run, never a second — if the re-run passes,
+   go to step 3; auto-decisions made during the round are recorded in the commit body like any
+   other.
+5. **If the cause is unclear, or the re-run still fails**: `git add` by name every path you
+   created or modified — **stage, do not commit** — and report done with `RESULT: fail`,
+   `COMMAND: <the failing command, verbatim>` and `CHANGED: <every path you created or
+   modified>`. Do not attempt a second fix round.

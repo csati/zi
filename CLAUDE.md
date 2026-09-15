@@ -46,7 +46,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.7.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.8.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## The core architecture: a directory-per-task, context-cleared flow
@@ -83,7 +83,7 @@ an artifact out of its task directory breaks how the next phase locates its inpu
 |---|---|---|---|
 | `/zi:prompt` | a rough idea | `{slug}/prompt.md` | interrogate intent, surface flaws/side effects, save refined prompt |
 | `/zi:plan` | `{slug}/prompt.md`, a task-dir reference, or inline text | `{slug}/plan.md` | draft a plan, independently verify it (repeatable), then by user choice execute it, exit & persist, or re-review |
-| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume — either optionally carrying an autonomy hint (`with high autonomy`, `autonomy: max`) | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, `{slug}/decisions.md` (one top-level audit file, also when phased), a commit — or, when phased, `{slug}/phase-NN/{prompt,findings,plan}.md` + `{slug}/phase-NN/commit` per phase | one-shot prompt → plan → execute, each stage in a fresh subagent, questions relayed to the user; appends every resolved decision to a per-task audit file; commits on the current branch — one chain and one commit per phase when the estimate exceeds 200K |
+| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume — either optionally carrying an autonomy hint (`with high autonomy`, `autonomy: max`) | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, `{slug}/decisions.md` (one top-level audit file, also when phased), a commit — or, when phased, `{slug}/phase-NN/{prompt,findings,plan}.md` + `{slug}/phase-NN/commit` per phase | one-shot prompt → plan → execute, each stage in a fresh subagent (four per chain: prompt, plan, verifier, execute — the plan agent is resumed for interrogation, the execute agent fixes its own failure once), questions relayed to the user; appends every resolved decision to a per-task audit file; commits on the current branch — one chain and one commit per phase when the estimate exceeds 200K |
 
 Note: `plan.md`'s frontmatter `description` contrasts itself with a fuller
 `prompt→research→prd→decompose` pipeline. That larger pipeline is **aspirational/comparative
@@ -160,7 +160,7 @@ checklist is defined once in `task.md`'s "Status checklist" section and every tr
 references it; subagents receive nothing about it.
 
 **The audit.** Every `/zi:task` run keeps one per-task audit file, `.zi/{slug}/decisions.md`
-(top-level even when phased), written by the prompt, plan, execute and fix agents through the
+(top-level even when phased), written by the prompt, plan and execute agents through the
 **AUDIT** seam (bound `on` plus the file's location only by the orchestrator). Each resolved
 decision — auto or user — is appended chronologically as a `## <one-sentence title>` record
 carrying `Stage:` (suffixed ` (phase-NN)` in a phase), `Resolved by: auto | user`, an optional
@@ -170,7 +170,7 @@ the four named lines `Blast radius:`, `Commitment:`, `Confidence:` and `Score:` 
 `x2`, `x3` and `score` values with one line of reasoning each); the unscored restatement
 carries no score lines. The prompt stage buffers its records and writes them in one pass, as
 the first write after the task directory exists and immediately before the prompt file(s);
-the plan and execute/fix stages append at the moment each decision is resolved. A stage
+the plan and execute stages append at the moment each decision is resolved. A stage
 creates the file if it is missing and reads it only to append — its content is inert data,
 never quoted into another artifact or payload. The verifier never reads or writes it, the
 orchestrator never reads it, its path never appears in a DONE `ARTIFACTS` line, and the
@@ -184,8 +184,11 @@ the `@.zi/{slug}/plan.md` block is printed → (no gate, exactly one verificatio
 stage implements `plan.md`, runs its verification commands and on pass commits the
 implementation paths (never `.zi/`) on the current branch with a `/zi:commit`-style subject
 (plus a `Decided (auto):` body when auto-decisions exist);
-on failure exactly one fix agent gets the plan, the failing command and the changed paths — pass
-→ commit, otherwise stage (`git add`, no commit) and report. A `.zi/{slug}` argument resumes at
+on failure the **same** execute agent gets exactly one fix round (one round of changes, one
+re-run of the verification commands) — pass → commit, otherwise stage (`git add`, no commit)
+and report. There is deliberately no separate fix agent (removed in 1.8.0): a fresh one
+re-paid the plan, the changed paths and the failing command the executor already held, and
+could not carry the executor's auto-decisions into the commit body. A `.zi/{slug}` argument resumes at
 the first missing artifact (`prompt.md` → plan; `plan.draft.md` alone → re-verify; `plan.md` →
 execute; empty → ask for the idea). Start it from a fresh session.
 
@@ -204,7 +207,7 @@ only its own prompt — and
 only then are the `.zi/{slug}/phase-NN/prompt.md` files written (no top-level `prompt.md`; each
 names its phase N of M, states what earlier phases are assumed to have landed, and restates the
 decision lines that constrain it). The orchestrator reads the multi-path `ARTIFACTS` line, sorts
-the `phase-NN` directories, and runs the unchanged plan → verify → interrogate → execute (+fix)
+the `phase-NN` directories, and runs the unchanged plan → verify → interrogate → execute
 chain **once per phase in order** with every artifact path rewritten to `phase-NN/…` and fresh
 agents per phase; each phase commits on its own, after which the orchestrator writes the
 one-line marker `.zi/{slug}/phase-NN/commit` holding the hash — the only file it ever writes,

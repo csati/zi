@@ -71,9 +71,9 @@ read-only subagent that writes `findings.md`, and becomes `plan.md` once the las
 resolved. There is no gate after the prompt stage and exactly one verification pass: as soon
 as `plan.md` exists the execute agent implements it, runs the plan's verification commands, and
 on pass **commits the implementation paths on the current branch** (never `.zi/` artifacts,
-never a push) with a terse single-line message. On failure exactly one fix agent gets the plan,
-the failing command and the changed paths; if it can't make verification pass the work is
-staged, not committed, and you're told which command failed.
+never a push) with a terse single-line message. On failure the same agent gets exactly one
+fix round; if that doesn't make verification pass the work is staged, not committed, and
+you're told which command failed.
 
 **A run is never silent between questions.** The orchestrator prints a status checklist at
 every stage boundary — which stage is running, what each finished stage produced (an artifact
@@ -91,7 +91,7 @@ in `prompt.md`, `plan.md` or the commit body, so nothing is decided invisibly; t
 stage's restatement of your idea is always asked, at every level.
 
 **Every decision is on the record.** Each task run keeps one `.zi/{slug}/decisions.md` (a
-single top-level file, also for phased runs), appended to by the prompt, plan, execute and fix
+single top-level file, also for phased runs), appended to by the prompt, plan and execute
 agents: one titled record per resolved decision, saying who resolved it, the question and your
 answer when it was you, and the blast-radius, commitment, confidence and score values with a
 line of reasoning each — so the run's decision history can be read afterwards. The verifier
@@ -105,7 +105,7 @@ are asked to **confirm the phase list** — one line per phase with its scope an
 unless the autonomy level lets the stage decide it, before anything is written. Each phase then gets its own `.zi/{slug}/phase-NN/prompt.md` (instead of a
 top-level `prompt.md`) and is planned, verified, executed and **committed on its own, one phase
 after another**, with a `phase-NN/commit` marker recording each hash. If a phase fails after its
-one fix attempt the run **halts**: later phases never start, earlier commits stay on the branch,
+one fix round the run **halts**: later phases never start, earlier commits stay on the branch,
 and the failing phase's work is left staged. Smaller jobs are untouched by this — a single
 `prompt.md`, one chain, one commit — and `/zi:prompt` never estimates or phases anything.
 

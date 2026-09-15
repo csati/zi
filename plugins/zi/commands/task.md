@@ -116,11 +116,11 @@ QUESTIONS:              # 1–4 entries
 
 ```
 STATUS: done
-STAGE: prompt | plan | verify | execute | fix
+STAGE: prompt | plan | verify | execute
 ARTIFACTS: <.zi/… path>[, <.zi/… path>]
-RESULT: <one line>       # execute/fix: "pass <hash>" or "fail"
-COMMAND: <failing command>   # execute/fix fail only
-CHANGED: <path>[, <path>]    # execute/fix fail only
+RESULT: <one line>       # execute: "pass <hash>" or "fail"
+COMMAND: <failing command>   # execute fail only
+CHANGED: <path>[, <path>]    # execute fail only
 ```
 
 ### The relay loop (run it for every spawned agent)
@@ -143,7 +143,7 @@ id so you can resume that same agent. Then:
    **Rescan** — when the answers go to the **prompt-stage** agent, first apply the hint
    grammar from the Argument section to each answer text; a hint found there rebinds `LEVEL`
    to `<level> (<setting>), from hint` for every later spawn in this run (plan, verifier
-   preamble, execute and fix agents, and every phase). The answer is still relayed verbatim.
+   preamble, execute agent, and every phase). The answer is still relayed verbatim.
    Answers to any other stage are never scanned.
 2. **Conforming DONE** → proceed with the stage flow below.
 3. **Anything else** — prose, a missing `STATUS` line, malformed lists, a plan-stage DONE whose
@@ -182,22 +182,22 @@ carry nothing about it.
 ### Rows and markers
 
 One row per stage, in pipeline order: `prompt`, `plan (draft)`, `verify`, `plan (interrogate)`,
-`execute`, `commit`. A `fix` row is inserted between `execute` and `commit` only once a fix
-agent is actually spawned — never speculatively. Exactly four markers:
+`execute`, `commit`. There is no `fix` row: the execute agent's one fix round happens inside
+its own stage and is not a transition. Exactly four markers:
 
 - `- [ ] <stage>` — pending.
 - `- [>] <stage> — <activity>` — running. `<activity>` is the fixed one-word label of that
   stage: `prompt` → `interrogating`, `plan (draft)` → `drafting`, `verify` → `verifying`,
-  `plan (interrogate)` → `interrogating`, `execute` → `implementing`, `fix` → `fixing`. The
-  `commit` row is never `[>]` — the execute/fix agent commits inside its own stage, so `commit`
+  `plan (interrogate)` → `interrogating`, `execute` → `implementing`. The
+  `commit` row is never `[>]` — the execute agent commits inside its own stage, so `commit`
   moves straight from `[ ]` to `[x]` or `[!]`.
 - `- [x] <stage> → <path or hash>` — done. For `prompt`, `plan (draft)`, `verify` and
   `plan (interrogate)` the payload after `→` is the path(s) the DONE payload's `ARTIFACTS` line
   named, verbatim (comma-separated when the prompt stage named several `phase-NN/prompt.md`
-  paths). For `execute`, `fix` and `commit` it is the hash from `RESULT: pass <hash>`.
-- `- [!] <stage> → failed` — a stage whose DONE carried `RESULT: fail` (`execute` or `fix`).
-  When the single fix agent also fails, `commit` is marked `- [!] commit → failed` as well
-  (the work is staged, not committed).
+  paths). For `execute` and `commit` it is the hash from `RESULT: pass <hash>`.
+- `- [!] <stage> → failed` — a stage whose DONE carried `RESULT: fail` (only `execute` can).
+  `commit` is marked `- [!] commit → failed` in the same print (the work is staged, not
+  committed).
 
 The `→` payload is the **only** content a row may carry beyond the stage name, marker and
 activity word: never free text, never a question or answer summary, never anything from an
@@ -209,7 +209,7 @@ applied to the checklist verbatim.
 Print the **whole** checklist (never a delta line) at each of these transitions, and nowhere
 else:
 
-- immediately after each `Agent` spawn (prompt, plan, verifier, execute, fix) — the spawned
+- immediately after each `Agent` spawn (prompt, plan, verifier, execute) — the spawned
   stage's row becomes `[>]`;
 - immediately after the `SendMessage` that resumes the plan agent with the findings path
   (plan-stage step 3) — `plan (interrogate)` becomes `[>]`. `verify` is already `[x]` from
@@ -246,7 +246,7 @@ is found phased), the list switches to the phased shape:
   `commit` marker exists or was just written, `- [>] phase-NN` for the running phase,
   `- [ ] phase-NN` for later phases, `- [!] phase-NN → failed` for a phase that halted the run;
 - only the running (or halted) phase is expanded: its stage rows — `plan (draft)`, `verify`,
-  `plan (interrogate)`, `execute`, [`fix`], `commit` — are indented one level under its
+  `plan (interrogate)`, `execute`, `commit` — are indented one level under its
   `[>] phase-NN` row and follow the flat rules above; every other phase is a single row, so
   scrollback stays short for many-phase runs;
 - writing `P/commit` is **not** a transition of its own: on a phase's `RESULT: pass <hash>`
@@ -392,7 +392,7 @@ re-print the checklist (Status checklist section) — `plan (interrogate)` is `[
 ### Execute stage
 
 1. Spawn a fresh `general-purpose` execute agent. Its prompt contains: the relay protocol
-   block; "Read and follow `<absolute execute-stage path>`"; mode `implement`; the plan path
+   block; "Read and follow `<absolute execute-stage path>`"; the plan path
    `.zi/{slug}/plan.md`; **ASK = the relay**; **AUTONOMY = the current `LEVEL`** (the value
    the preamble carries); and **AUDIT = `.zi/{slug}/decisions.md`**. Its git and verification
    commands run through the user's normal
@@ -402,17 +402,9 @@ re-print the checklist (Status checklist section) — `plan (interrogate)` is `[
    `execute` and `commit` are `[x]` with the hash — then report the plan path and the commit
    hash. Done.
 3. On DONE with `RESULT: fail` → re-print the checklist (Status checklist section) — `execute`
-   is `[!]` — then spawn **one** fresh `general-purpose` fix agent. Its prompt
-   contains: the relay protocol block; the execute-stage path; mode `fix`; the plan path; the
-   `COMMAND` line verbatim; the `CHANGED` list verbatim; **ASK = the relay**; **AUTONOMY = the
-   current `LEVEL`** (the value the preamble carries); **AUDIT = `.zi/{slug}/decisions.md`**.
-   Then re-print the checklist (Status
-   checklist section) — the `fix` row now exists and is `[>]`. Run the relay loop.
-   - `RESULT: pass <hash>` → re-print the checklist (Status checklist section) — `fix` and
-     `commit` are `[x]` with the hash — then report the plan path and the commit hash. Done.
-   - `RESULT: fail` → re-print the checklist (Status checklist section) — `fix` and `commit`
-     are `[!]` — then report the failing `COMMAND` and that the work (its `CHANGED` paths) is
-     **staged, not committed**. Done. Never spawn a second fix agent.
+   and `commit` are `[!]` — then report the failing `COMMAND` and that the work (its `CHANGED`
+   paths) is **staged, not committed**. Done. The execute agent has already used its one fix
+   round inside its stage; **never spawn a fix agent** or resume the execute agent to retry.
 
 ### Phased flow
 
@@ -434,9 +426,9 @@ checklist tracks no such artifact.
    `P/<artifact>`: prompt path `P/prompt.md`, DRAFT `P/plan.draft.md`, verifier output
    `P/findings.md`, PERSIST → `P/plan.md`, execute plan path `P/plan.md` — the AUDIT binding
    is the one path **not** rewritten: in every phase spawn (plan, verifier's off-limits
-   clause, execute, fix) it stays the top-level `.zi/{slug}/decisions.md`. Each phase gets
-   fresh agents (plan, verifier, execute, and at most one fix); the fenced `@P/plan.md` block
-   is printed per phase with the actual path; each phase's execute/fix agent commits on its
+   clause, execute) it stays the top-level `.zi/{slug}/decisions.md`. Each phase gets
+   fresh agents (plan, verifier, execute); the fenced `@P/plan.md` block
+   is printed per phase with the actual path; each phase's execute agent commits on its
    own under the unchanged execute-stage rules — one commit per phase. Whenever those stages
    say to re-print the checklist (Status checklist section), the checklist is in its phased
    shape and the running phase is the expanded one.
@@ -446,7 +438,7 @@ checklist tracks no such artifact.
    re-print — when you then re-print the checklist (Status checklist section), that print
    already shows the phase collapsed to `- [x] phase-NN → <hash>`; the marker write gets no
    print of its own. Then start the next phase. Flat tasks get no marker.
-3. **Halt**: on a phase's final `RESULT: fail` (after its single fix agent) stop — never start
+3. **Halt**: on a phase's `RESULT: fail` (its execute agent's one fix round is already spent) stop — never start
    a later phase. That fail DONE's re-print the checklist (Status checklist section) shows the
    phase row `[!]` with its inner rows as the fail left them — no separate halt print. Then
    report the failing phase directory `P`, the `COMMAND`, that the `CHANGED` paths are
@@ -485,7 +477,7 @@ checklist tracks no such artifact.
   and always record the factors and the score in the artifact or commit body, never in a
   payload; the prompt stage's restatement is always asked. The hint is detected only in the
   argument text and in relayed prompt-stage answers — nowhere else.
-- **Commit, never push.** The execute/fix agent commits implementation paths only, on the
+- **Commit, never push.** The execute agent commits implementation paths only, on the
   current branch; `.zi/` artifacts are never staged.
 - Start this command from a **fresh session** — the orchestrator's own context should hold
   nothing but this run.
