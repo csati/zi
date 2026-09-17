@@ -15,7 +15,7 @@ finds the first automatically (`prompt.md` → `plan.md`).
 
 ## The commands
 
-The plugin ships seven slash commands — two planning phases, a one-shot pipeline, a standalone overnight-loop generator, two git helpers, and a code locator:
+The plugin ships eight slash commands — two planning phases, a one-shot pipeline, a standalone overnight-loop generator, two git helpers, a code locator, and a todo registrar:
 
 | Command | Reads | Produces | Role |
 |---------|-------|----------|------|
@@ -26,6 +26,7 @@ The plugin ships seven slash commands — two planning phases, a one-shot pipeli
 | `/zi:stage <desc>` | your description | staged files | stage files for commit from a natural-language description |
 | `/zi:commit` | staged changes | a commit | commit staged changes with a terse single-line message |
 | `/zi:locate <desc>` | a description or saved label | code pointers (+ a saved reference) | locate code from a natural-language description, or recall a saved one by label |
+| `/zi:todo <concept>` | a concept or a file describing it | `.zi/todo/{ts}-{slug}.md` + a line in `.zi/todo/README.md` | register a todo document and a skimmable record entry (never lists or completes) |
 
 **Clear context between phases.** Each phase's quality comes from a clean context that sees
 only the prior artifact. Both planning phases are interactive — you run them, answer their
@@ -143,6 +144,22 @@ guessed path. It is **read-only for your repo**; the only thing it writes is a s
 (`/zi:locate jwt-validator`). Use it to be *pointed at* code, not to have it explained or changed —
 it's a lookup helper, not part of the `prompt → plan` flow.
 
+### `/zi:todo` — register a todo
+
+Takes a concept — inline text, or a path to a file describing it — rephrases it, proposes a short
+slug and a 1–2 word effort guess, and asks exactly **one** confirm/revise question (revise loops
+until you confirm; nothing is written before that). It then writes exactly two things: a todo
+document `.zi/todo/{ts}-{slug}.md` (frontmatter with `created`, `source` and `effort`, the
+confirmed rephrasing, and grounded `path:line — why` pointers only when the concept points at
+real code) and one appended checkbox line in the record file `.zi/todo/README.md`, of the form
+`` - [ ] `{ts}-{slug}.md` — <brief description> — effort: <1–2 words> ``. The record file is
+the skimmable index; it is appended to, never rewritten, so boxes you tick by hand survive.
+
+It is **not a prompt and not a plan**: it never interrogates intent, surfaces risks, plans, or
+touches repo files, and it never lists, completes, or edits todos. To act on a todo later, hand
+the document's path to `/zi:prompt` as a file path or paste its text into `/zi:task`; **never
+pass `.zi/todo` as a task directory**, and don't point `/zi:plan` at a todo document.
+
 ## Install
 
 This repo is **self-contained**: its root is a one-plugin marketplace named `ncs-plugins`
@@ -184,7 +201,7 @@ zi/                                   ← repo root = the "ncs-plugins" marketpl
 ├── .claude-plugin/marketplace.json    ← the catalog (lists the zi plugin)
 ├── plugins/zi/                       ← the plugin itself
 │   ├── .claude-plugin/plugin.json
-│   ├── commands/   prompt, plan, task, overnight, stage, commit, locate
+│   ├── commands/   prompt, plan, task, overnight, stage, commit, locate, todo
 │   └── stages/     prompt, plan, verify, execute   ← shared stage text read by prompt, plan and task
 ├── README.md
 ├── CLAUDE.md
@@ -201,6 +218,7 @@ After install, commands are namespaced **`/zi:<command>`** (e.g. `/zi:prompt`).
   pushes), so invoke it only when that is what you want.
 - **Independence is the point.** `/zi:plan`'s verification runs in a fresh subagent with no
   view of the planning conversation — it reports findings, it never silently rewrites the plan.
-- **`stage`, `commit`, and `locate`** are general-purpose helpers bundled alongside the planning
-  commands — handy, but not part of the `prompt → plan` flow itself. `locate` is read-only for your
-  repo (it only writes recallable references under `.zi/location/`).
+- **`stage`, `commit`, `locate`, and `todo`** are general-purpose helpers bundled alongside the
+  planning commands — handy, but not part of the `prompt → plan` flow itself. `locate` is read-only
+  for your repo (it only writes recallable references under `.zi/location/`), and `todo` writes
+  only under `.zi/todo/`.
