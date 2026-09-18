@@ -24,7 +24,7 @@ The plugin ships eight slash commands — two planning phases, a one-shot pipeli
 | `/zi:task <idea>` | a rough idea, or a `.zi/{slug}` dir to resume | `prompt.md`, `findings.md`, `plan.md`, `decisions.md` + a commit — or, for oversized work, `phase-NN/` directories each with those three files, a commit and a `commit` marker (plus one top-level `decisions.md`) | run prompt → plan → execute in fresh subagents, relay their questions to you, commit on pass |
 | `/zi:overnight <goal>` | a loop GOAL | `.zi/{slug}/overnight.md` | interrogate the goal, generate an unattended never-halt loop-orchestration prompt |
 | `/zi:stage <desc>` | your description | staged files | stage files for commit from a natural-language description |
-| `/zi:commit` | staged changes | a commit | commit staged changes with a terse single-line message |
+| `/zi:commit` | staged changes | a commit | commit staged changes with a terse subject, plus a short body only when the diff needs explaining |
 | `/zi:locate <desc>` | a description or saved label | code pointers (+ a saved reference) | locate code from a natural-language description, or recall a saved one by label |
 | `/zi:todo <concept>` | a concept or a file describing it | `.zi/todo/{ts}-{slug}.md` + a line in `.zi/todo/README.md` | register a todo document and a skimmable record entry (never lists or completes) |
 
