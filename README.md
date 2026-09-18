@@ -76,9 +76,11 @@ read-only subagent that writes `findings.md`, and becomes `plan.md` once the las
 resolved. There is no gate after the prompt stage and exactly one verification pass: as soon
 as `plan.md` exists the execute agent implements it, runs the plan's verification commands, and
 on pass **commits the implementation paths on the current branch** (never `.zi/` artifacts,
-never a push) with a terse single-line message. On failure the same agent gets exactly one
-fix round; if that doesn't make verification pass the work is staged, not committed, and
-you're told which command failed.
+never a push) with a terse single-line message. On failure the same agent keeps fixing and
+re-running verification in rounds until it passes; when a round stalls on the same error, or
+after 10 rounds, it asks you whether to continue fixing (another 10 rounds, with any guidance
+you give) or stop. Only when you answer Stop is the work staged, not committed, and you're
+told which command failed.
 
 **A run is never silent between questions.** The orchestrator prints a status checklist at
 every stage boundary — which stage is running, what each finished stage produced (an artifact
@@ -109,8 +111,8 @@ converted to tokens, times three for tool output, tests and iteration). If the t
 are asked to **confirm the phase list** — one line per phase with its scope and estimate —
 unless the autonomy level lets the stage decide it, before anything is written. Each phase then gets its own `.zi/{slug}/phase-NN/prompt.md` (instead of a
 top-level `prompt.md`) and is planned, verified, executed and **committed on its own, one phase
-after another**, with a `phase-NN/commit` marker recording each hash. If a phase fails after its
-one fix round the run **halts**: later phases never start, earlier commits stay on the branch,
+after another**, with a `phase-NN/commit` marker recording each hash. If you stop a phase's fix
+loop the run **halts**: later phases never start, earlier commits stay on the branch,
 and the failing phase's work is left staged. Smaller jobs are untouched by this — a single
 `prompt.md`, one chain, one commit — and `/zi:prompt` never estimates or phases anything.
 

@@ -177,8 +177,9 @@ carry nothing about it.
 ### Rows and markers
 
 One row per stage, in pipeline order: `prompt`, `plan (draft)`, `verify`, `plan (interrogate)`,
-`execute`, `commit`. There is no `fix` row: the execute agent's one fix round happens inside
-its own stage and is not a transition. Exactly four markers:
+`execute`, `commit`. There is no `fix` row: the execute agent's fix-and-retry loop and its
+stall question happen inside its own stage; the stall question is an ordinary relay question
+(no print, relay-loop step 1) and a Continue answer is not a transition. Exactly four markers:
 
 - `- [ ] <stage>` — pending.
 - `- [>] <stage> — <activity>` — running. `<activity>` is the fixed one-word label of that
@@ -395,10 +396,13 @@ re-print the checklist (Status checklist section) — `plan (interrogate)` is `[
 2. On DONE with `RESULT: pass <hash>` → re-print the checklist (Status checklist section) —
    `execute` and `commit` are `[x]` with the hash — then report the plan path and the commit
    hash. Done.
-3. On DONE with `RESULT: fail` → re-print the checklist (Status checklist section) — `execute`
-   and `commit` are `[!]` — then report the failing `COMMAND` and that the work (its `CHANGED`
-   paths) is **staged, not committed**. Done. The execute agent has already used its one fix
-   round inside its stage; **never spawn a fix agent** or resume the execute agent to retry.
+3. On DONE with `RESULT: fail` — which arrives only after the user answered "Stop" on the
+   execute agent's stall question (relayed like any question) or the agent could not run its
+   verification at all — re-print the checklist (Status checklist section) — `execute` and
+   `commit` are `[!]` — then report the failing `COMMAND` and that the work (its `CHANGED`
+   paths) is **staged, not committed**. Done. There is no retry outside that agent —
+   **never spawn a fix agent**; the only resume the execute agent ever gets is the relay's
+   `ANSWERS:` message.
 
 ### Phased flow
 
@@ -432,8 +436,8 @@ checklist tracks no such artifact.
    re-print — when you then re-print the checklist (Status checklist section), that print
    already shows the phase collapsed to `- [x] phase-NN → <hash>`; the marker write gets no
    print of its own. Then start the next phase. Flat tasks get no marker.
-3. **Halt**: on a phase's `RESULT: fail` (its execute agent's one fix round is already spent) stop — never start
-   a later phase. That fail DONE's re-print the checklist (Status checklist section) shows the
+3. **Halt**: on a phase's `RESULT: fail` (which now arrives only after the user stopped that
+   phase's fix loop, or its verification could not run) stop — never start a later phase. That fail DONE's re-print the checklist (Status checklist section) shows the
    phase row `[!]` with its inner rows as the fail left them — no separate halt print. Then
    report the failing phase directory `P`, the `COMMAND`, that the `CHANGED` paths are
    **staged, not committed**, that earlier phases' commits stay on the branch, and the resume
@@ -456,7 +460,7 @@ checklist tracks no such artifact.
 - **Phases run strictly in order**, each with fresh agents, and a phase's agents receive only
   that phase's `phase-NN/…` paths — the single top-level path they receive is the audit file
   `.zi/{slug}/decisions.md`; no cross-phase artifact path ever crosses a boundary; a phase's
-  failure halts the run.
+  `RESULT: fail` — reached only after the user stopped its fix loop — halts the run.
 - **The relay never restates**, and the orchestrator never reads artifact bodies (`Glob` only
   under `.zi/`) — `decisions.md` included: the orchestrator never reads the audit file, and
   the checklist has no row for it. The `P/commit` marker is the only file the orchestrator

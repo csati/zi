@@ -49,7 +49,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.11.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.12.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## The core architecture: a directory-per-task, context-cleared flow
@@ -86,7 +86,7 @@ an artifact out of its task directory breaks how the next phase locates its inpu
 |---|---|---|---|
 | `/zi:prompt` | a rough idea | `{slug}/prompt.md` | interrogate intent, surface flaws/side effects, save refined prompt |
 | `/zi:plan` | `{slug}/prompt.md`, a task-dir reference, or inline text | `{slug}/plan.md` | draft a plan, independently verify it (repeatable), then by user choice execute it, exit & persist, or re-review |
-| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume — either optionally carrying an autonomy hint (`with high autonomy`, `autonomy: max`) | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, `{slug}/decisions.md` (one top-level audit file, also when phased), a commit — or, when phased, `{slug}/phase-NN/{prompt,findings,plan}.md` + `{slug}/phase-NN/commit` per phase | one-shot prompt → plan → execute, each stage in a fresh subagent (four per chain: prompt, plan, verifier, execute — the plan agent is resumed for interrogation, the execute agent fixes its own failure once), questions relayed to the user; appends every resolved decision to a per-task audit file; commits on the current branch — one chain and one commit per phase when the estimate exceeds 200K |
+| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume — either optionally carrying an autonomy hint (`with high autonomy`, `autonomy: max`) | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, `{slug}/decisions.md` (one top-level audit file, also when phased), a commit — or, when phased, `{slug}/phase-NN/{prompt,findings,plan}.md` + `{slug}/phase-NN/commit` per phase | one-shot prompt → plan → execute, each stage in a fresh subagent (four per chain: prompt, plan, verifier, execute — the plan agent is resumed for interrogation, the execute agent fixes its own failures in a bounded loop and asks on a stall), questions relayed to the user; appends every resolved decision to a per-task audit file; commits on the current branch — one chain and one commit per phase when the estimate exceeds 200K |
 
 Note: `plan.md`'s frontmatter `description` contrasts itself with a fuller
 `prompt→research→prd→decompose` pipeline. That larger pipeline is **aspirational/comparative
@@ -189,9 +189,13 @@ the `@.zi/{slug}/plan.md` block is printed → (no gate, exactly one verificatio
 stage implements `plan.md`, runs its verification commands and on pass commits the
 implementation paths (never `.zi/`) on the current branch with a `/zi:commit`-style subject
 (plus a `Decided (auto):` body when auto-decisions exist);
-on failure the **same** execute agent gets exactly one fix round (one round of changes, one
-re-run of the verification commands) — pass → commit, otherwise stage (`git add`, no commit)
-and report. There is deliberately no separate fix agent (removed in 1.8.0): a fresh one
+on failure the **same** execute agent runs a fix-and-retry loop: rounds of one change-set
+plus one re-run of the verification commands, until a pass, a **stall** (same command, same
+essential error as the previous failed run) or the 10-round ceiling; stall or ceiling → a
+relayed "Continue fixing / Stop" question — a checkpoint asked at every autonomy level, never
+scored or recorded; Continue grants another 10 rounds in the same agent, Stop → stage
+(`git add`, no commit) and report `RESULT: fail`. There is deliberately no separate fix agent
+(removed in 1.8.0): a fresh one
 re-paid the plan, the changed paths and the failing command the executor already held, and
 could not carry the executor's auto-decisions into the commit body. A `.zi/{slug}` argument resumes at
 the first missing artifact (`prompt.md` → plan; `plan.draft.md` alone → re-verify; `plan.md` →
@@ -216,8 +220,8 @@ the `phase-NN` directories, and runs the unchanged plan → verify → interroga
 chain **once per phase in order** with every artifact path rewritten to `phase-NN/…` and fresh
 agents per phase; each phase commits on its own, after which the orchestrator writes the
 one-line marker `.zi/{slug}/phase-NN/commit` holding the hash — the only file it ever writes,
-checked by `Glob` presence only. A phase's final failure **halts** the run (later phases never
-start; earlier commits stay; work is staged, not committed). Resuming a phased `.zi/{slug}`
+checked by `Glob` presence only. A phase's `RESULT: fail` (only after the user stops its fix
+loop) **halts** the run (later phases never start; earlier commits stay; work is staged, not committed). Resuming a phased `.zi/{slug}`
 picks the lowest-numbered phase without `commit` and applies the per-artifact rules inside it;
 all phases marked → the task is reported complete; a phase directory lacking `prompt.md` is
 reported as malformed, never routed to "ask for the idea". The thresholds live in the stage

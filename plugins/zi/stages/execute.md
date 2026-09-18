@@ -22,8 +22,10 @@ The host hands you:
 
 - the path of the verified plan, `.zi/{slug}/plan.md`.
 
-There is no separate fix stage: when verification fails you get **one fix round** yourself
-(see the procedure below), and the host never spawns another agent to retry.
+There is no separate fix stage: when verification fails you run the **fix-and-retry loop**
+yourself (Procedure steps 4–6). The host never spawns another agent to retry, and the only
+resumes you get are the relay's `ANSWERS:` messages — to your stall question (step 5) or to an
+in-round ASK.
 
 ## Operating rules
 
@@ -82,8 +84,9 @@ There is no separate fix stage: when verification fails you get **one fix round*
 ## Decision audit (AUDIT on)
 
 Under AUDIT on, every open decision the plan left that this stage resolved — auto or via ASK,
-during implementation or during the fix round — is recorded in the per-task audit file at the bound
-location. **Timing**: append at the moment each decision is resolved. The audit file lives
+during implementation or during any fix round — is recorded in the per-task audit file at the bound
+location. The stall question itself (Procedure step 5) is a checkpoint, never a decision, and is
+never audited. **Timing**: append at the moment each decision is resolved. The audit file lives
 under `.zi/` and is therefore never staged or committed (the git rules above); the audit record
 is additional to the commit-body `Decided (auto):` lines and never enters the commit. Under
 AUDIT off nothing is written.
@@ -128,13 +131,45 @@ AUDIT off nothing is written.
    names). These run through the user's normal permissions.
 3. **On pass**: `git add` the changed/created implementation paths by name, commit on the
    current branch per the git rules above, then report done with `RESULT: pass <commit hash>`.
-4. **On any failing command — one fix round.** Investigate the failure: read the command's
-   output and the paths involved, and find the cause. **Fix only if the cause seems clear**,
-   then re-run the plan's verification commands **once**. That single re-run is the whole
-   round: you get one round of changes and one re-run, never a second — if the re-run passes,
-   go to step 3; auto-decisions made during the round are recorded in the commit body like any
-   other.
-5. **If the cause is unclear, or the re-run still fails**: `git add` by name every path you
-   created or modified — **stage, do not commit** — and report done with `RESULT: fail`,
-   `COMMAND: <the failing command, verbatim>` and `CHANGED: <every path you created or
-   modified>`. Do not attempt a second fix round.
+4. **On any failing command — the fix-and-retry loop.** The initial run of step 2 is not a
+   round. A **round** is exactly: investigate the failure (the command's output and the paths
+   involved) and find the cause, make one set of changes, then re-run the plan's verification
+   commands **once**. Every round attempts a fix — an unclear cause is investigated inside the
+   round, never a reason to skip it. If the re-run passes, go to step 3; auto-decisions made
+   during a round are recorded in the commit body (and, under AUDIT on, the audit file) like
+   any other. If the re-run fails, apply the **stall check** before starting the next round:
+   - **Stall**: the re-run failed on the **same verification command** with the **same
+     essential error line(s)** as the most recent failed run (the initial run for round 1),
+     ignoring volatile output — timings, timestamps, temp paths, counters. A different command
+     or a different error is progress. The baseline is always the most recent failed run and
+     persists across a "Continue" answer.
+   - **Ceiling**: 10 rounds per grant.
+
+   A stall or the ceiling → step 5; otherwise start the next round. **No-weakening rule**: a
+   round never weakens, skips, deletes or relaxes the plan's verification commands, tests or
+   acceptance criteria to make them pass; wanting to is a decision to score or ASK, never a fix.
+5. **Stall question.** On a stall or at the ceiling, stop and put this fixed-form question
+   through ASK, with exactly one entry:
+   - header: `Fix loop`
+   - question: "Verification still fails on `<failing command, verbatim>` after <N> round(s)
+     — <stalled on the same error | round ceiling reached>. Continue fixing?" (`<N>` is the
+     round counter of the current grant)
+   - options, in this order:
+     1. label `Continue fixing (Recommended)` — description: another 10 rounds in this same
+        agent, context intact; free text on this question is applied as guidance for the next
+        round.
+     2. label `Stop — stage the work and report the failure` — description: `git add` every
+        changed path by name, no commit, `RESULT: fail` with `COMMAND:` and `CHANGED:`.
+
+   "Continue fixing" or any free text → reset the round counter to 0 and resume the loop at
+   step 4 in this same agent, taking free text as guidance for the next round (guidance never
+   weakens the verification — the no-weakening rule holds). "Stop" → step 6. The stall
+   question is a **checkpoint, not a decision**: it is never scored, it is asked at every
+   autonomy level (including `max`), and it gets no `Decided (…)` line, no commit-body line
+   and no audit record. Only decisions resolved inside a round — an open choice the fix
+   forces — are scored or ASKed and recorded, exactly as during implementation.
+6. **On Stop, or when a verification command cannot be run at all** (permission denied by the
+   user, tool missing — there is nothing to iterate on, so no stall question): `git add` by
+   name every path you created or modified — **stage, do not commit** — and report done with
+   `RESULT: fail`, `COMMAND: <the failing command, verbatim>` and `CHANGED: <every path you
+   created or modified>`.
