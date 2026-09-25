@@ -42,7 +42,10 @@ of code only when a pointer cannot show the point. Check for:
   the role the step implies, and every `modify`/`create` entry is used by some step. (A path
   a step touches that the manifest omits is the finding; do not fix it by reading around.)
 - **Feasibility & ordering** — the approach is workable, the steps are correctly ordered, and
-  nothing depends on something not yet established.
+  nothing depends on something not yet established. A `create` entry, new helper or new
+  abstraction that duplicates an existing symbol, a standard-library facility or an installed
+  dependency is an over-building finding — cite the existing one; check it only by `Grep` for
+  the specific facility, never by a sweep of the repo.
 - **Verifiability** — acceptance criteria are concrete and checkable, not vague ("should be
   fast").
 - **Structural substance** — every part of the plan (approach, steps, files to touch,

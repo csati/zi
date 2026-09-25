@@ -108,7 +108,10 @@ lines:
    manifest** (Plan content rules) — the prompt's manifest, corrected and extended to every
    file the implementation reads, modifies or creates. Describe *intent and target
    interfaces*, not pasted final source. Every path or symbol named MUST be one you verified
-   exists.
+   exists. **Reuse before you create**: before a `create` entry, a new helper or a new
+   abstraction, check the codebase, the standard library and the installed dependencies for
+   one that already does the job, and plan the smallest change that meets every acceptance
+   criterion — never trimming validation, error handling or security the prompt requires.
 3. Hand DRAFT to VERIFY.
 
 ### Phase 2 — Independent verification
@@ -118,7 +121,8 @@ Its instructions are the sibling stage text **`verify.md`** (the host binds its 
 hands the verifier that file — by path to read, or verbatim); it receives exactly the DRAFT
 location, the resolved prompt (path or verbatim text) and where to return its findings. It
 checks prompt fidelity in both directions, internal consistency, groundedness (per `## Files`
-entry), manifest completeness, feasibility and ordering, verifiability and structural
+entry), manifest completeness, feasibility and ordering (including over-building),
+verifiability and structural
 substance, treats `Decided (user):` lines as settled and `Decided (auto):` lines in DRAFT as
 challengeable by re-scoring, and returns a **structured findings list** — each finding with a
 *severity*, a *location in the plan*, *evidence* and a *recommended fix* — or "no findings".
