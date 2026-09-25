@@ -17,7 +17,12 @@ The plugin ships two kinds of files:
   subagents read, referenced as `${CLAUDE_PLUGIN_ROOT}/stages/<name>.md`. `verify.md` is the
   verifier's **only** stage text (the "Verifier mandate", extracted so the verifier does not
   pay for the plan stage's drafting/interrogation text); the plan agent never reads it, and
-  `plan.md`'s Phase 2 just summarises what it checks.
+  `plan.md`'s Phase 2 just summarises what it checks. Four more on-demand files sit beside
+  them, read only when their seam or host needs them: `stages/{relay,audit,phasing-estimate,phasing-split}.md`
+  — `relay.md` (the relay preamble and payload shapes) by every non-verifier `/zi:task`
+  subagent, `audit.md` (the shared audit record rules) by a stage under AUDIT on, and the two
+  phasing tiers by the prompt stage under PHASING on (`phasing-estimate.md` always,
+  `phasing-split.md` only when the estimate exceeds 200K).
 
 There is nothing to compile or lint; "testing" a change means installing the plugin and running
 the command. How edits reach an installed plugin depends on how the marketplace was added (see
@@ -49,7 +54,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.12.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.13.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## The core architecture: a directory-per-task, context-cleared flow
@@ -166,7 +171,9 @@ references it; subagents receive nothing about it.
 
 **The audit.** Every `/zi:task` run keeps one per-task audit file, `.zi/{slug}/decisions.md`
 (top-level even when phased), written by the prompt, plan and execute agents through the
-**AUDIT** seam (bound `on` plus the file's location only by the orchestrator). Each resolved
+**AUDIT** seam (bound `on` plus the file's location and the `stages/audit.md` path only by
+the orchestrator). The shared record form, create-if-missing and independence rules live in
+`stages/audit.md`; the `Supersedes:` rule stays in `stages/plan.md`. Each resolved
 decision — auto or user — is appended chronologically as a `## <one-sentence title>` record
 carrying `Stage:` (suffixed ` (phase-NN)` in a phase), `Resolved by: auto | user`, an optional
 `Description:`, `Question:` / `Answer:` on every user-resolved record, an optional
@@ -224,8 +231,9 @@ checked by `Glob` presence only. A phase's `RESULT: fail` (only after the user s
 loop) **halts** the run (later phases never start; earlier commits stay; work is staged, not committed). Resuming a phased `.zi/{slug}`
 picks the lowest-numbered phase without `commit` and applies the per-artifact rules inside it;
 all phases marked → the task is reported complete; a phase directory lacking `prompt.md` is
-reported as malformed, never routed to "ask for the idea". The thresholds live in the stage
-text; the host binds only on/off. `stages/plan.md`, `stages/execute.md` and `commands/plan.md`
+reported as malformed, never routed to "ask for the idea". The estimate rule and thresholds
+live in `stages/phasing-estimate.md`, the phase-split and per-phase-file rules in
+`stages/phasing-split.md`; the host binds only on/off plus the two paths. `stages/plan.md`, `stages/execute.md` and `commands/plan.md`
 know nothing about phases.
 The one path the orchestrator never rewrites to `phase-NN/…` is the audit file: every phase's
 agents receive the top-level `.zi/{slug}/decisions.md` as their AUDIT binding.
@@ -253,12 +261,17 @@ the Phase 4 three-way choice + bootstrap line + `ExitPlanMode`, AUTONOMY = the h
 AUDIT = unbound;
 the orchestrator binds ASK = the relay, DRAFT = `.zi/{slug}/plan.draft.md`, VERIFY = an
 orchestrator-spawned verifier on `stages/verify.md` with PLAN = `plan.draft.md`, PROMPT =
-`prompt.md`, FINDINGS = write `findings.md`, PERSIST = rename to `plan.md`, AUTONOMY =
-the hint or medium, bound in the relay preamble, PHASING = on, AUDIT = on with the top-level
-`.zi/{slug}/decisions.md`. The relay preamble states only the setting and that the QUESTION
-payload is ASK — the level vocabulary, factors, formula and record form are stated once, in
-each stage text's Operating rules (and in `verify.md`'s challengeable-rule), never repeated in
-the spawn prompt. Each stage file opens with a Seams table; keep
+`prompt.md`, FINDINGS = write `findings.md` via a Bash heredoc (Claude Code rejects a
+subagent's `Write` of a report file — "Subagents should return findings as text"), PERSIST = rename to `plan.md`, AUTONOMY =
+the hint or medium, a filled-in `AUTONOMY = …` line in every non-verifier spawn prompt, PHASING =
+on with the `phasing-estimate.md` and `phasing-split.md` paths, AUDIT = on with the top-level
+`.zi/{slug}/decisions.md` and the `audit.md` path. The relay preamble lives in
+`stages/relay.md` (included into `task.md`, read by every non-verifier subagent); it carries no
+setting — it points at the spawn prompt's AUTONOMY line and says the QUESTION payload is ASK —
+and the level vocabulary, factors, formula and record form are stated once, in each stage
+text's Operating rules (and in `verify.md`'s challengeable-rule), never repeated in the spawn
+prompt. The verifier receives neither `relay.md` nor an AUTONOMY line — only its DONE payload
+shape. Each stage file opens with a Seams table; keep
 it in sync when a host's binding changes. When editing a stage file remember it has **two hosts** — a change
 must hold for the interactive wrapper and for a relay-driven subagent alike.
 

@@ -42,8 +42,8 @@ user has explicit feedback on exactly what is being refined.
 |---|---|
 | ASK | `AskUserQuestion`. Phase 1: exactly **one question per call, asked sequentially**, never batched into one call; the tool's free-text "Other" path is the free-text path. Phase 2: **batched** calls of up to the tool's 4-question max, multiple sequential calls of ≤4 when more risks exist. |
 | AUTONOMY | `<level> (<setting>), from hint` when a hint was detected in the argument text, else **`zero (0.0), default`** — an unhinted run asks every question as today. |
-| PHASING | **off** — always a single `prompt.md`; no estimate is computed or recorded, interactive behaviour is unchanged. |
-| AUDIT | **unbound** — the stage default applies (off, nothing written); interactive runs keep no audit file. |
+| PHASING | **off** — always a single `prompt.md`; no estimate is computed or recorded and no phasing rule file is read, interactive behaviour is unchanged. |
+| AUDIT | **unbound** — the stage default applies (off, nothing read or written — no audit rule file is read); interactive runs keep no audit file. |
 | TIMESTAMP | the value below, captured when the command was invoked (only if it is missing, run `date +%Y%m%d-%H%M%S` yourself): |
 
 !`date +%Y%m%d-%H%M%S`

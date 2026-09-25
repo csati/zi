@@ -83,7 +83,7 @@ proceed — never explore or draft outside plan mode.
 | VERIFY | this command launches **one fresh subagent** with the `Agent` tool, using a read-only agent type (`Explore`, or a `general-purpose` agent explicitly instructed to stay read-only and only report), with no access to this conversation. Its prompt says "Read and follow `${CLAUDE_PLUGIN_ROOT}/stages/verify.md` — your only stage text" and binds its seams: **PLAN** = the harness plan file path, **PROMPT** = the resolved prompt (file path, or inline text verbatim), **FINDINGS** = unbound (its findings arrive in its report text). The four rules that bind it are in that stage text; nothing else is passed — never this conversation, never `stages/plan.md`. It reads the autonomy level from the prompt's `Autonomy:` line per its stage text (absent, or inline text → zero). |
 | PERSIST | Phase 4 below: the three-way choice, the bootstrap line, `ExitPlanMode`, then the Persistence rules. |
 | AUTONOMY | the `Autonomy: <level> (<setting>)` line of the prompt file the argument resolved to; **zero (0.0)** when the line is absent or the prompt is inline text (no provenance word — this host has no restatement and detects no hint). It governs decisions inside the stage's Phases 1–3 and, on **Execute now**, implementation-time decisions; the Phase 4 choice itself is a host gate (see below). |
-| AUDIT | **unbound** — the stage default applies (off, nothing written); interactive runs keep no audit file. |
+| AUDIT | **unbound** — the stage default applies (off, nothing read or written — no audit rule file is read); interactive runs keep no audit file. |
 
 Entry point: `draft` (the stage's Phase 1). Run the stage's Phases 1–3, then come back here
 for Phase 4.

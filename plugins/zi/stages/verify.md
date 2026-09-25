@@ -21,7 +21,8 @@ needs for one check below comes from the `Autonomy:` line of PROMPT, never from 
 Independently verify the plan against the prompt and the actual codebase and return a
 **structured findings list**, each finding carrying: *severity*, *location in the plan*,
 *evidence* (what the prompt says, or what the codebase actually shows), and a *recommended
-fix*. Check for:
+fix*. *Evidence* is capped at **3 lines**: `path:line` pointers first, quoting at most one line
+of code only when a pointer cannot show the point. Check for:
 
 - **Prompt fidelity (both directions)** — every requirement, constraint, and success criterion
   in the prompt is addressed by the plan; and the plan invents no scope the prompt never asked
@@ -67,7 +68,7 @@ and nothing said there reaches you:
   `score = 1 - (1 - x1) × (1 - x2) × x3`, so the verifier can recompute. It reports a
   `Decided (auto):` line as a finding **only** when it judges a factor estimate wrong such that
   the corrected score would exceed the setting, giving its corrected factors as the finding's
-  evidence. Independently of that judgement, a `Decided (auto):` line that lacks factors, whose
+  evidence (the corrected `x1`/`x2`/`x3` are exempt from the evidence cap). Independently of that judgement, a `Decided (auto):` line that lacks factors, whose
   `score` does not follow from its factors by the formula, or whose recorded `score` already
   exceeds the setting is reported under the **internal consistency** check. This applies to
   `Decided (auto):` lines **in the plan (PLAN) only**; `Decided (auto):` lines in `prompt.md`

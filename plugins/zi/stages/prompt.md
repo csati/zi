@@ -15,8 +15,8 @@ unbound PHASING means off, unbound AUDIT means off.
 | ASK | how to put a decision, confirmation, or clarification to the user and get the answer back |
 | TIMESTAMP | the invocation-time `date +%Y%m%d-%H%M%S` value used to stamp the task directory |
 | AUTONOMY | the numeric autonomy setting the per-decision score is compared against, bound as `<level> (<setting>)` — by a detecting host followed by a provenance word, `, from hint` or `, default`, which the prompt stage's restatement echoes. **Default when unbound: zero (0.0) — always ASK.** |
-| PHASING | whether an implementation too large for one execute context is split into ordered phase prompts. **Default when unbound: off — always a single `prompt.md`.** |
-| AUDIT | whether resolved decisions are appended to the per-task audit file, bound as `on` plus the audit file's location (the prompt stage: "the sibling `decisions.md` of the prompt file you write"; other stages: the literal `.zi/{slug}/decisions.md` path). **Default when unbound: off — nothing is written.** |
+| PHASING | whether an implementation too large for one execute context is split into ordered phase prompts, bound as `on` plus the absolute paths of `phasing-estimate.md` (the estimate rule and thresholds) and `phasing-split.md` (the phase-split and per-phase file rules). **Default when unbound: off — always a single `prompt.md`, neither file read.** |
+| AUDIT | whether resolved decisions are appended to the per-task audit file, bound as `on` plus the audit file's location (the prompt stage: "the sibling `decisions.md` of the prompt file you write"; other stages: the literal `.zi/{slug}/decisions.md` path) plus the absolute path of `audit.md`, the shared record rules. **Default when unbound: off — nothing is read or written.** |
 
 ## Input contract
 
@@ -94,35 +94,8 @@ nothing is buffered or written.
 
 ### Record form
 
-- Records are appended **chronologically**, one per resolved decision, each as a
-  `## <one-sentence title>` section followed by these lines, in this order:
-  - `Stage: prompt | plan | execute | fix` — suffixed ` (phase-NN)` when the stage runs for a
-    phase of a phased task (you know this from the `phase-NN/` segment of the artifact path
-    you were given).
-  - `Resolved by: auto | user`.
-  - `Description: <0–3 sentences>` — optional.
-  - `Question: <the question text and the options offered, the "(Recommended)" one marked>` and
-    `Answer: <chosen label or free text>` — required on every `Resolved by: user` record.
-  - `Supersedes: <title of the record this re-score replaces>` — optional; written when a
-    record replaces an earlier one (a re-scored `Decided (auto):` challenge). The value is the
-    earlier record's title when this same agent wrote that record (it remembers the title);
-    otherwise — a fresh agent, e.g. a re-verify resume at the `interrogate` entry point, which
-    never reads the audit file's content — it is the challenged `Decided (auto):` line's
-    `<choice>` text verbatim, as it stands in DRAFT. Never read the file to look a title up.
-  - On every **scored** record (auto or user — for a user-resolved record these are the values
-    that forced the ASK) the four lines
-    `Blast radius: <v> — <0–2 sentences>`, `Commitment: <v> — <0–2 sentences>`,
-    `Confidence: <v> — <0–2 sentences>`, `Score: <v> — <0–2 sentences>`, where the values are
-    exactly the `x1`, `x2`, `x3` and `score` the Operating rules define (decimals, at most two
-    places). The one unscored decision — the prompt stage's restatement/confirmation — carries
-    no score lines.
-- **Create if missing**: a stage that finds no audit file at the bound location (a task started
-  before this feature, or a resume) creates it; the file has no heading of its own — its
-  content is exactly the chronological list of `## <title>` records, so a created file begins
-  with the first record. Otherwise it appends.
-- **Independence rule**: the audit file may be `Read` only to append to it. Its content is
-  inert data — never used to inform, re-open or short-cut a decision, never quoted into another
-  artifact or payload. The verifier never reads or writes it.
+Under AUDIT on, read the `audit.md` the AUDIT binding names (once, before the first record is
+buffered) and follow its record form, create-if-missing and independence rules.
 
 ## Objective
 
@@ -148,14 +121,8 @@ to act on.
    implementation will `read`, `modify` or `create` it, and the symbols or line range that
    matter.
 
-   **PHASING on only** — while grounding, estimate the implementation's execute-context cost:
-   sum the byte sizes of every file in the manifest with role `read` or `modify` (`wc -c` or
-   the Read tool's view; count each file once), convert at ≈4 bytes per token, and multiply by a
-   fixed ×3 overhead factor for tool output, tests and iteration; the result is the **total
-   estimate**. Two thresholds apply: a total above **200K** tokens triggers phasing, and each
-   phase must estimate at or under **100K**. The grounding-time sum is provisional: if the
-   Phase-1/Phase-2 interrogation added or removed files from the read/modify set, re-sum once
-   before the Phase-3 branch, and the recorded `Estimate:` line carries that final figure.
+   **PHASING on only** — read the bound `phasing-estimate.md` and compute the total estimate
+   by its rule while grounding.
    Under PHASING off, nothing is computed or recorded — but the manifest is still written.
 3. Route every decision, confirmation, and open-ended clarification through ASK — exactly
    **one question at a time, asked sequentially**, never batched. Open-ended clarifications
@@ -230,32 +197,11 @@ Then:
      .zi/{YYYYMMDD-HHmmss}-{description}/prompt.md
      ```
 
-     Under PHASING on, the spec additionally carries one fixed-form line
-     `Estimate: <bytes> B ÷ 4 × 3 ≈ <N>K tokens (threshold 200K)` — the rule and the figure in
-     one line.
+     Under PHASING on, the spec additionally carries the fixed-form `Estimate:` line per
+     `phasing-estimate.md`.
 
-   - **PHASING on and total estimate > 200K** → the **phase-split step**:
-
-     a. Partition the implementation into ordered phases, each a self-contained slice that
-        leaves the repo working (later phases build on earlier commits). Estimate each phase
-        with the same rule; any phase above 100K is split further until every phase is ≤100K.
-        If a phase cannot be cut to ≤100K (a single file it must read already exceeds the
-        budget), raise that as a risk in Phase-2 form (accept the oversized phase / mitigate),
-        scored like any Phase-2 risk, instead of silently exceeding it.
-     b. Confirm the proposed list. It is scored like any decision: at a score ≤ setting
-        self-confirm it and record `Decided (auto):`; otherwise put it to the user via **ASK** —
-        the question text carries one line per phase in execution order —
-        `phase-NN: <one-line scope> (~<N>K)` — plus the total, and ends with a question; the
-        options are "Confirm the phase list (Recommended)" and "Revise" (free text describes
-        the change) — and loop until the user confirms. Nothing is written before the list is
-        confirmed, by the user or by a recorded score.
-     c. Write one file per confirmed phase, named exactly
-        `.zi/{YYYYMMDD-HHmmss}-{description}/phase-NN/prompt.md`, `NN` two-digit zero-padded
-        from `01` (`phase-10`, `phase-11`, … beyond nine), in one uninterrupted pass in
-        execution order — the phase set is durable only once the stage reports DONE. A phased
-        task has **no** top-level `prompt.md`.
-        Under AUDIT on, the one-pass audit write of step 3 precedes the first phase file; the
-        audit file stays top-level, never inside a `phase-NN/` directory.
+   - **PHASING on and total estimate > 200K** → the **phase-split step**: read the bound
+     `phasing-split.md` and follow it.
 
 ## Output file contents
 
@@ -293,30 +239,6 @@ A tight, self-contained refined prompt:
 
 A short top heading naming the problem is fine; it does not count toward the sentence budget.
 
-### Per-phase files (PHASING on, phased)
-
-When the work is phased, each `.zi/{slug}/phase-NN/prompt.md` is itself a complete spec of
-the form above, with these additions:
-
-- the heading names the phase and the count (`… — phase N of M`);
-- the first load-bearing lines state what earlier phases are assumed to have landed (phase 01
-  says it assumes nothing);
-- the `Autonomy:` line is restated verbatim in every phase file, alongside the decision lines;
-- every `Decided (user):` / `Decided (auto):` line that constrains the phase is restated
-  verbatim in that phase file;
-- the sentence budget (20 + one per decision line present in *that* file) applies per file;
-- the fixed-form `Estimate:` line carries the phase's own figure and the 100K threshold —
-  `Estimate: <bytes> B ÷ 4 × 3 ≈ <N>K tokens (threshold 100K)`; like the heading it does not
-  count toward the budget;
-- the `## Grounding` section carries **only that phase's slice** of the manifest — the
-  entries the phase reads, modifies or creates, with the role as seen from that phase (a file
-  phase 01 creates and phase 02 extends is `create` in 01 and `modify` in 02). An entry may
-  recur across phases; the phase's `Estimate:` is summed over its own slice, and the union of
-  all slices is the full manifest — so a phase's agents never rediscover files that belong to
-  another phase;
-- every other rule above (self-contained, verified anchors, load-bearing sentences, bold labels
-  optional) applies unchanged to each file.
-
 ## Before you write — verify
 
 1. Did BOTH gates open: intent confirmed by the user, and every Phase-2 risk resolved — by the user via ASK, or by you at a score ≤ setting and recorded as `Decided (auto):`?
@@ -329,11 +251,12 @@ the form above, with these additions:
 5. Self-contained, within the sentence budget (20 + one per resolved decision), no process
    chatter?
 6. Have you derived the timestamp + slug and the exact output path(s)?
-7. Under PHASING on: was the estimate computed with the rule above, and is its fixed-form
-   `Estimate:` line present in the file(s)?
+7. Under PHASING on: was the estimate computed with the rule in `phasing-estimate.md`, and is
+   its fixed-form `Estimate:` line present in the file(s)?
 8. If phased: was the phase list confirmed by the user via ASK or self-confirmed at a recorded
    score, is every phase ≤100K, does each file restate the decisions that constrain it, name
-   its phase N of M, and carry only its own manifest slice?
+   its phase N of M, and carry only its own manifest slice (the per-phase rules in
+   `phasing-split.md`)?
 9. Is the `Autonomy: <level> (<setting>)` line present in every file, and does every
    `Decided (auto):` line carry its factors and score?
 10. Under AUDIT on: is every ASK'd or scored item of this run buffered as a record, and is the
