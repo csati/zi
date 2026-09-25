@@ -71,7 +71,9 @@ subagent**, passing nothing between them but `.zi/{slug}/…` paths. Subagents c
 questions directly, so every question a stage raises — the prompt interrogation, the risk
 batches, each verification finding, an open decision during implementation — is **relayed** to
 you as a normal `AskUserQuestion` and your answer is sent back to the same agent; nothing else
-in the pipeline needs you. The plan is drafted to `plan.draft.md`, independently verified by a
+in the pipeline needs you. The prompt stage's mutually independent clarification questions
+arrive together (up to four in one question) once the restatement of your idea is confirmed on
+its own, while `/zi:prompt` still asks them one at a time. The plan is drafted to `plan.draft.md`, independently verified by a
 read-only subagent that writes `findings.md`, and becomes `plan.md` once the last finding is
 resolved. There is no gate after the prompt stage and exactly one verification pass: as soon
 as `plan.md` exists the execute agent implements it, runs the plan's verification commands, and

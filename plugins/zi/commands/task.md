@@ -289,8 +289,9 @@ printed before the verifier spawn:
 
 Spawn a fresh `general-purpose` `Agent` (never `fork`). Its prompt contains, and only
 contains: the relay lines (Relay protocol section); "Read and follow `<absolute prompt-stage
-path>`"; the seam bindings **ASK = the relay** (Phase 1: one question per QUESTION payload;
-Phase 2: risk batches of up to 4 per payload), **AUTONOMY = the filled-in AUTONOMY line**,
+path>`"; the seam bindings **ASK = the relay** (Phase 1: after the restatement, asked alone first,
+Phase-1 batches are permitted — up to 4 mutually independent clarification questions per
+QUESTION payload; Phase 2: risk batches of up to 4 per payload), **AUTONOMY = the filled-in AUTONOMY line**,
 **PHASING = on, with the absolute `phasing-estimate.md` and `phasing-split.md` paths** (those
 files hold the estimate rule, the thresholds and the split rules; the host only switches
 phasing on and names them),

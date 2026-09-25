@@ -12,7 +12,7 @@ unbound PHASING means off, unbound AUDIT means off.
 
 | Seam | Meaning |
 |---|---|
-| ASK | how to put a decision, confirmation, or clarification to the user and get the answer back |
+| ASK | how to put a decision, confirmation, or clarification to the user and get the answer back — and whether Phase-1 clarifications may be batched (and up to how many per batch, ≤4); unstated means they may not: one question at a time |
 | TIMESTAMP | the invocation-time `date +%Y%m%d-%H%M%S` value used to stamp the task directory |
 | AUTONOMY | the numeric autonomy setting the per-decision score is compared against, bound as `<level> (<setting>)` — by a detecting host followed by a provenance word, `, from hint` or `, default`, which the prompt stage's restatement echoes. **Default when unbound: zero (0.0) — always ASK.** |
 | PHASING | whether an implementation too large for one execute context is split into ordered phase prompts, bound as `on` plus the absolute paths of `phasing-estimate.md` (the estimate rule and thresholds) and `phasing-split.md` (the phase-split and per-phase file rules). **Default when unbound: off — always a single `prompt.md`, neither file read.** |
@@ -124,14 +124,32 @@ to act on.
    **PHASING on only** — read the bound `phasing-estimate.md` and compute the total estimate
    by its rule while grounding.
    Under PHASING off, nothing is computed or recorded — but the manifest is still written.
-3. Route every decision, confirmation, and open-ended clarification through ASK — exactly
-   **one question at a time, asked sequentially**, never batched. Open-ended clarifications
-   still go through ASK, always carrying a "(Recommended)" option; when the suggestion's
-   confidence is low, say so explicitly in the question text. The user's free-text path covers
-   genuinely open answers. No arbitrary question cap, but never pad with questions the code
-   already answers. Every clarification is scored; a score ≤ setting resolves it without ASK
-   and records it per the `Decided (auto):` label rule; the one-at-a-time mechanics for the
-   remaining questions are unchanged.
+3. Route every decision, confirmation, and open-ended clarification through ASK. **Default:**
+   exactly **one question at a time, asked sequentially**. Open-ended clarifications still go
+   through ASK, always carrying a "(Recommended)" option; when the suggestion's confidence is
+   low, say so explicitly in the question text. The user's free-text path covers genuinely
+   open answers. No arbitrary question cap, but never pad with questions the code already
+   answers. Every clarification is scored individually; a score ≤ setting resolves it without
+   ASK and records it per the `Decided (auto):` label rule; only the clarifications above the
+   setting are asked — one at a time by default, or in batches where the host permits them.
+
+   **Host-permitted batching.** Only when the ASK binding explicitly permits Phase-1 batches
+   may clarifications be put to the user in batches of up to the bound size (never more
+   than 4); otherwise the default above holds. Within a permitted batch:
+   - **Independence** — a question joins a batch only if its wording and options do not depend
+     on the answer to another question in that batch; a dependent question waits for a later
+     batch.
+   - **Restatement alone** — the step-1 restatement/confirmation is always asked alone, before
+     any clarification batch: every clarification depends on the confirmed parse, and a hint in
+     its answer can rebind the level.
+   - **Distinct headers** — the questions of one batch carry distinct headers; the answers come
+     back keyed by header.
+   - **Resume re-check** — on resume after a batch, check its answers against each other and
+     against the grounding; a question whose answer another answer invalidated or contradicted
+     is re-asked in the next batch and never recorded from the stale answer.
+   - **Audit order** — under AUDIT on, each batched question still gets its own record,
+     buffered in the order the questions appeared in the batch; a re-asked question is recorded
+     once, from its final answer.
 
    Silently confirm the spec will be able to pin each of these. A missing "must" item is a
    blocking gap, scored like any other decision — resolved via ASK, or by you at a score ≤

@@ -54,7 +54,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.13.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.14.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## The core architecture: a directory-per-task, context-cleared flow
@@ -157,7 +157,9 @@ former challengeable by the verifier only when a corrected factor estimate pushe
 above the setting (a challenged line is re-scored by the plan agent, `x3` capped at its
 recorded value, and asked only if it then exceeds the setting). The orchestrator rescans every
 answer it relays to the prompt-stage agent for a hint and rebinds the level for every later
-spawn when it finds one.
+spawn when it finds one. Under `/zi:task` the prompt-stage agent may put up to 4 mutually
+independent Phase-1 clarifications in one payload (the restatement always alone, first),
+while `/zi:prompt` keeps one question per call.
 
 **The checklist.** The orchestrator re-prints a fixed-form Markdown checklist (one row per
 stage: `[ ]` pending, `[>] — <activity>` running, `[x] → <path or hash>` done, `[!] → failed`)
@@ -377,6 +379,8 @@ commands:
   exception**: invoking it *is* the decision to implement — it executes the verified plan and
   commits on the current branch (never pushes) with no further gate.
 - **Resolve in code what the code can answer; only ask the user for intent and decisions.**
-  Ask decisions and clarifications one question per call, sequentially, via `AskUserQuestion`;
+  Ask decisions and clarifications one question per call, sequentially, via `AskUserQuestion`
+  (the `/zi:task` exception: its prompt stage batches mutually independent Phase-1
+  clarifications, ≤4, into one relayed call, after the restatement is confirmed alone);
   present risks/consequences as batched `AskUserQuestion` calls (≤4 each), and never pad with
   questions the code already answers.
