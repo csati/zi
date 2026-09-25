@@ -17,12 +17,16 @@ The plugin ships two kinds of files:
   subagents read, referenced as `${CLAUDE_PLUGIN_ROOT}/stages/<name>.md`. `verify.md` is the
   verifier's **only** stage text (the "Verifier mandate", extracted so the verifier does not
   pay for the plan stage's drafting/interrogation text); the plan agent never reads it, and
-  `plan.md`'s Phase 2 just summarises what it checks. Four more on-demand files sit beside
-  them, read only when their seam or host needs them: `stages/{relay,audit,phasing-estimate,phasing-split}.md`
+  `plan.md`'s Phase 2 only says who launches the verifier and what comes back. Six more
+  on-demand files sit beside them, read only when their seam or host needs them:
+  `stages/{relay,audit,phasing-estimate,phasing-split,task-phased,task-resume}.md`
   — `relay.md` (the relay preamble and payload shapes) by every non-verifier `/zi:task`
-  subagent, `audit.md` (the shared audit record rules) by a stage under AUDIT on, and the two
+  subagent, `audit.md` (the shared audit record rules) by a stage under AUDIT on, the two
   phasing tiers by the prompt stage under PHASING on (`phasing-estimate.md` always,
-  `phasing-split.md` only when the estimate exceeds 200K).
+  `phasing-split.md` only when the estimate exceeds 200K), and `task-phased.md` /
+  `task-resume.md` (the orchestrator's phased-run and resume rules) read with `Read` by the
+  `/zi:task` orchestrator itself only on a phased / resumed run — never by a subagent, never
+  `@`-included.
 
 There is nothing to compile or lint; "testing" a change means installing the plugin and running
 the command. How edits reach an installed plugin depends on how the marketplace was added (see
@@ -54,8 +58,35 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.15.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.16.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
+
+## Token budget
+
+What each host loads, as full file bytes, ≈tokens = bytes ÷ 4 (orchestrator rows: flat fresh =
+`task.md` + `relay.md`; a resume adds `task-resume.md`, a phased run `task-phased.md`). Before =
+1.15.0, after = 1.16.0.
+
+| Host | Files loaded | Before B | ≈tok | After B | ≈tok |
+|---|---|---|---|---|---|
+| `/zi:prompt` | commands/prompt + stages/prompt | 23915 | 5979 | 21444 | 5361 |
+| `/zi:plan` | commands/plan + stages/plan | 27170 | 6793 | 22683 | 5671 |
+| `/zi:plan` verifier | stages/verify | 6031 | 1508 | 6031 | 1508 |
+| `/zi:task` orchestrator, flat fresh | commands/task + relay | 32635 | 8159 | 21893 | 5473 |
+| `/zi:task` orchestrator, flat resume | + task-resume | 32635 | 8159 | 24367 | 6092 |
+| `/zi:task` orchestrator, phased fresh | + task-phased | 32635 | 8159 | 27594 | 6899 |
+| `/zi:task` orchestrator, phased resume | + task-resume + task-phased | 32635 | 8159 | 30068 | 7517 |
+| `/zi:task` prompt agent | relay + stages/prompt + audit + phasing-estimate | 24863 | 6216 | 22392 | 5598 |
+| `/zi:task` prompt agent, >200K | above + phasing-split | 28276 | 7069 | 25909 | 6477 |
+| `/zi:task` plan agent | relay + stages/plan + audit | 16603 | 4151 | 15384 | 3846 |
+| `/zi:task` verifier | stages/verify | 6031 | 1508 | 6031 | 1508 |
+| `/zi:task` execute agent | relay + stages/execute + audit | 14960 | 3740 | 13445 | 3361 |
+
+Re-measure:
+
+```
+cd plugins/zi && wc -c commands/prompt.md commands/plan.md commands/task.md stages/*.md
+```
 
 ## The core architecture: a directory-per-task, context-cleared flow
 
@@ -168,7 +199,8 @@ interrogation, and after every conforming DONE — never during a relay (the `As
 is the feedback there). Rows carry only stage names, markers, artifact paths and commit hashes
 — never free text or artifact content. Phased runs show one row per phase with only the
 running phase expanded; a resume pre-marks rows from the same `Glob` the resume rules run. The
-checklist is defined once in `task.md`'s "Status checklist" section and every transition point
+checklist is defined once in `task.md`'s "Status checklist" section (its phased and resume
+shapes in `stages/task-phased.md` / `stages/task-resume.md`) and every transition point
 references it; subagents receive nothing about it.
 
 **The audit.** Every `/zi:task` run keeps one per-task audit file, `.zi/{slug}/decisions.md`
@@ -208,7 +240,8 @@ scored or recorded; Continue grants another 10 rounds in the same agent, Stop �
 re-paid the plan, the changed paths and the failing command the executor already held, and
 could not carry the executor's auto-decisions into the commit body. A `.zi/{slug}` argument resumes at
 the first missing artifact (`prompt.md` → plan; `plan.draft.md` alone → re-verify; `plan.md` →
-execute; empty → ask for the idea). Start it from a fresh session.
+execute; empty → ask for the idea); the resume shape lives in `stages/task-resume.md`. Start
+it from a fresh session.
 
 **Phasing.** The prompt stage has a **PHASING** seam (default when unbound: **off** — always a
 single `prompt.md`). `/zi:prompt` binds it off, so its output is unchanged; only `/zi:task`
@@ -238,7 +271,9 @@ live in `stages/phasing-estimate.md`, the phase-split and per-phase-file rules i
 `stages/phasing-split.md`; the host binds only on/off plus the two paths. `stages/plan.md`, `stages/execute.md` and `commands/plan.md`
 know nothing about phases.
 The one path the orchestrator never rewrites to `phase-NN/…` is the audit file: every phase's
-agents receive the top-level `.zi/{slug}/decisions.md` as their AUDIT binding.
+agents receive the top-level `.zi/{slug}/decisions.md` as their AUDIT binding. The
+orchestrator's phased rules (phased resume, phased checklist shape, phased flow) live in
+`stages/task-phased.md`, read only once a run turns phased.
 
 **Seams.** Stage texts are written against named seams the host binds: **ASK** (how to ask the
 user), **TIMESTAMP** (the invocation `date` value — inline `` !`date` `` does not resolve for
@@ -304,7 +339,8 @@ Each `plugins/zi/commands/*.md` is frontmatter + a prompt body. Match the existi
 - **`${CLAUDE_PLUGIN_ROOT}`** — expands inside command bodies (verified: in bare prose, in
   `` !`…` `` lines, and in `@…` file inclusions). The wrappers include their stage text with
   `@${CLAUDE_PLUGIN_ROOT}/stages/<name>.md`; `task.md` passes the expanded absolute paths to its
-  subagents, which `Read` the stage file themselves.
+  subagents, which `Read` the stage file themselves, and also `Read`s its own two on-demand
+  files (`task-phased.md`, `task-resume.md`) at runtime.
 - **Wrapper shape** — `prompt.md` and `plan.md` are thin hosts: input resolution + `$ARGUMENTS`,
   a "Seam bindings" table, any host-only phases (plan mode, Phase 4, persistence), then the
   `@` inclusion of the stage. Behaviour lives in `stages/`; put stage-agnostic rules there and

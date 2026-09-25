@@ -15,7 +15,8 @@ b. Confirm the proposed list. It is scored like any decision: at a score ≤ set
    `phase-NN: <one-line scope> (~<N>K)` — plus the total, and ends with a question; the
    options are "Confirm the phase list (Recommended)" and "Revise" (free text describes
    the change) — and loop until the user confirms. Nothing is written before the list is
-   confirmed, by the user or by a recorded score.
+   confirmed, by the user or by a recorded score — the list is the
+   cross-phase coverage check: each phase's verifier sees only its own phase prompt.
 c. Write one file per confirmed phase, named exactly
    `.zi/{YYYYMMDD-HHmmss}-{description}/phase-NN/prompt.md`, `NN` two-digit zero-padded
    from `01` (`phase-10`, `phase-11`, … beyond nine), in one uninterrupted pass in

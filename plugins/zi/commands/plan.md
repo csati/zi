@@ -8,16 +8,10 @@ allowed-tools: Bash(date:*), Read, Grep, Glob, Agent, AskUserQuestion, EnterPlan
 
 ## Objective
 
-Turn a prompt — inline text or a prompt file — into a **verified** implementation plan. Draft
-the plan in plan mode, have a **fresh, independent subagent** verify it against the prompt and
-the actual codebase, interrogate every finding with the user one at a time, update the plan,
-then finish with a **three-way choice** — execute it now, exit plan mode, or run another
-independent reviewer and repeat; both finishing paths persist the plan to `.zi/{slug}/plan.md`.
-This is a standalone quick planner, not a step in the prompt→research→prd→decompose pipeline.
-
-This command is a thin host wrapper: it resolves the input, enters plan mode, binds the stage's
-seams for interactive use, runs the shared plan stage included at the end of this file (its
-Phases 1–3), and owns Phase 4 — the three-way finish and persistence — itself.
+Turn a prompt — inline text or a prompt file — into a **verified** implementation plan. This
+command is a thin host wrapper: it resolves the input, enters plan mode, binds the stage's seams,
+runs the shared plan stage included at the end of this file (its Phases 1–3), and owns Phase 4
+— the three-way finish and persistence — itself.
 
 ## Operating rules (host)
 
@@ -80,9 +74,9 @@ proceed — never explore or draft outside plan mode.
 |---|---|
 | ASK | `AskUserQuestion` — one finding per call: the recommended fix first (labelled "(Recommended)"), any meaningful alternative, and an explicit **"Keep as-is"**; the tool's "Other" path is the custom-resolution path. |
 | DRAFT | the **harness plan file** named in the plan-mode system message; draft with `Write`, apply finding resolutions with `Edit`. |
-| VERIFY | this command launches **one fresh subagent** with the `Agent` tool, using a read-only agent type (`Explore`, or a `general-purpose` agent explicitly instructed to stay read-only and only report), with no access to this conversation. Its prompt says "Read and follow `${CLAUDE_PLUGIN_ROOT}/stages/verify.md` — your only stage text" and binds its seams: **PLAN** = the harness plan file path, **PROMPT** = the resolved prompt (file path, or inline text verbatim), **FINDINGS** = unbound (its findings arrive in its report text). The four rules that bind it are in that stage text; nothing else is passed — never this conversation, never `stages/plan.md`. It reads the autonomy level from the prompt's `Autonomy:` line per its stage text (absent, or inline text → zero). |
+| VERIFY | this command launches **one fresh subagent** with `Agent` — a read-only type (`Explore`, or a `general-purpose` agent told to stay read-only and only report) with no access to this conversation. Its prompt says "Read and follow `${CLAUDE_PLUGIN_ROOT}/stages/verify.md` — your only stage text" and binds **PLAN** = the harness plan file path, **PROMPT** = the resolved prompt (file path, or inline text verbatim), **FINDINGS** = unbound (findings arrive in its report text). Nothing else is passed — never this conversation, never `stages/plan.md`; its rules, including reading the autonomy level from the prompt, are in its stage text. |
 | PERSIST | Phase 4 below: the three-way choice, the bootstrap line, `ExitPlanMode`, then the Persistence rules. |
-| AUTONOMY | the `Autonomy: <level> (<setting>)` line of the prompt file the argument resolved to; **zero (0.0)** when the line is absent or the prompt is inline text (no provenance word — this host has no restatement and detects no hint). It governs decisions inside the stage's Phases 1–3 and, on **Execute now**, implementation-time decisions; the Phase 4 choice itself is a host gate (see below). |
+| AUTONOMY | the resolved prompt file's `Autonomy: <level> (<setting>)` line; **zero (0.0)** when absent or the prompt is inline text (no provenance word — this host detects no hint). It governs the stage's Phases 1–3 and, on **Execute now**, implementation-time decisions; Phase 4 itself is a host gate. |
 | AUDIT | **unbound** — the stage default applies (off, nothing read or written — no audit rule file is read); interactive runs keep no audit file. |
 
 Entry point: `draft` (the stage's Phase 1). Run the stage's Phases 1–3, then come back here
@@ -92,10 +86,8 @@ for Phase 4.
 
 Once every finding from the **latest** verification round is resolved and the plan is fully
 updated, do **not** exit plan mode automatically. Present a single `AskUserQuestion` with
-exactly three choices and act on the answer. This three-way choice and the `ExitPlanMode`
-approval are **host gates, never scored — always asked at every autonomy level**; only
-decisions inside the stage's Phases 1–3 and during Execute-now implementation use the AUTONOMY
-binding.
+exactly three choices and act on the answer. This choice and the `ExitPlanMode` approval are
+**host gates, never scored — always asked at every autonomy level**.
 
 1. **Execute now** — implement the finished plan in this same context. Call `ExitPlanMode` to
    leave plan mode (include any `allowedPrompts` the implementation needs, e.g. "run tests",
@@ -125,12 +117,10 @@ calling `ExitPlanMode`, while the harness plan file is still editable:
    > Bootstrap (remove this line when persisting): first write this plan, minus this line,
    > verbatim to `.zi/20260101-000000-example/plan.md`, then continue.
 
-   The line exists for the case where the user's plan-mode setting **clears context on
-   approval**: the approved plan text is the only thing carried into the fresh context, so the
-   persistence instruction must ride inside the plan itself to survive the clear. In the
-   same-context case it is harmlessly redundant — the very next step persists the plan (minus
-   the line) and the harness plan file is discarded. It is an instruction inside the plan file,
-   not an early persist: nothing is written under `.zi/` before `ExitPlanMode`.
+   If the plan-mode setting **clears context on approval**, the approved plan text is all the
+   fresh context gets, so the persistence instruction rides inside it; otherwise it is
+   harmlessly redundant. It is not an early persist: nothing is written under `.zi/` before
+   `ExitPlanMode`.
 
 If the user **rejects** the `ExitPlanMode` approval on either branch, the session is still in
 plan mode and nothing may be persisted or implemented: **remove the bootstrap line** from the
@@ -150,53 +140,25 @@ the bootstrap line** — to the `.zi/{slug}/plan.md` path resolved before exitin
 - **If the prompt came from a file inside an existing `.zi/{slug}/` directory** — write
   `plan.md` as a **sibling** in that same directory, so it stays paired with its source.
 - **Otherwise** (inline text, or a file outside `.zi/`) — create a fresh task directory, stamped
-  with the timestamp below (captured when the command was invoked; its exact value is not
-  important — it only dates the session and gives task directories a natural ordering — so do
-  not re-derive it; only if it is missing, run `date +%Y%m%d-%H%M%S` yourself):
+  with the invocation timestamp below, used as-is (only if it is missing, run
+  `date +%Y%m%d-%H%M%S` yourself):
 
   !`date +%Y%m%d-%H%M%S`
 
-  Derive a
-  **1–4 word** kebab-case `{description}` slug that identifies the task (e.g.
+  Derive a **1–4 word** kebab-case `{description}` slug that identifies the task (e.g.
   `auth-token-refresh`, `csv-export`), create `.zi/{YYYYMMDD-HHmmss}-{description}/` (and `.zi/`
   itself) if it does not yet exist, and write `plan.md` inside it.
 
 Then tell the user the exact path you wrote (including the `.zi/{slug}/` prefix) and print — on
-its own line — a fenced code block whose sole content is a bare file-mention of the plan you
-just wrote, with the **actual** resolved path (never the literal `{slug}`), so it can be
-copy-pasted in one tap to start an implementation session (e.g. from the Android Claude app over
-a remote-control session):
+its own line — a fenced code block whose sole content is a bare file-mention of the plan, with
+the **actual** resolved path (never the literal `{slug}`), so it can be copy-pasted in one tap
+to start an implementation session:
 
 ```
 @.zi/20260101-000000-example/plan.md
 ```
 
 On **Exit plan mode**, stop here. On **Execute now**, go on to implement the plan.
-
-## Guardrails
-
-- **Plan mode first.** `EnterPlanMode` is the first action after the prompt is resolved; no
-  codebase Read/Grep/Glob happens before it. Resolution itself only reads the prompt file.
-- **Never persist early.** The `.zi/{slug}/plan.md` artifact is written only after `ExitPlanMode`
-  on Phase 4's **Execute now** or **Exit plan mode** branch — never "just in case," and never
-  during a second-reviewer round. The bootstrap line prepended before exit is an instruction
-  inside the harness plan file, not a persist — it writes nothing under `.zi/`.
-- **Independence is mandatory.** Every verifier — the first and each **Run a second reviewer**
-  round — is a fresh subagent with no view of this conversation, not a self-review pass.
-- **One finding at a time.** In every review round, resolve and apply each finding before raising
-  the next; never present them as a batch, and never silently pick an interpretation — ask, or
-  self-resolve only at a score ≤ the bound setting and record it.
-- **Phase 4 is never scored.** The three-way choice and the `ExitPlanMode` approval are host
-  gates, always asked at every autonomy level; the binding applies only inside the stage's
-  Phases 1–3 and to implementation-time decisions on **Execute now**.
-- **Ground every claim; specify intent, not source.** Describe what to build and the target
-  interfaces; do not paste final code into the plan.
-- **Implementation is opt-in and final.** The command writes code only on the explicit
-  **Execute now** choice at Phase 4; **Exit plan mode** persists and stops; **Run a second
-  reviewer** loops. It never starts implementing on its own.
-- **A rejected exit changes nothing.** If the user rejects the `ExitPlanMode` approval, the
-  session stays in plan mode, nothing is persisted or implemented, and control returns to the
-  Phase 4 three-way question once the bootstrap line is removed from the plan file.
 
 ## The stage
 
