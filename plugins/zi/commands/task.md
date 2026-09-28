@@ -29,6 +29,8 @@ This is the plugin's one command that ends in a commit.
     also included below (Relay protocol)
   - audit record rules: `${CLAUDE_PLUGIN_ROOT}/stages/audit.md` — passed inside every
     non-verifier AUDIT binding
+  - commit message rules: `${CLAUDE_PLUGIN_ROOT}/stages/commit-message.md` — passed inside the
+    execute spawn's COMMIT binding
   - phasing tiers: `${CLAUDE_PLUGIN_ROOT}/stages/phasing-estimate.md` and
     `${CLAUDE_PLUGIN_ROOT}/stages/phasing-split.md` — passed inside the prompt spawn's PHASING
     binding
@@ -281,7 +283,8 @@ plus the absolute `audit.md` path — then re-prints (`plan (interrogate)` `[>]`
 1. Spawn a fresh `general-purpose` execute agent. Its prompt contains: the relay lines;
    "Read and follow `<absolute execute-stage path>`"; the plan path `.zi/{slug}/plan.md`;
    **ASK = the relay**; **AUTONOMY = the filled-in AUTONOMY line**; and
-   **AUDIT = `.zi/{slug}/decisions.md`, plus the absolute `audit.md` path**. Its git and
+   **AUDIT = `.zi/{slug}/decisions.md`, plus the absolute `audit.md` path**; and
+   **COMMIT = the absolute `commit-message.md` path**. Its git and
    verification commands run through the user's normal permissions. Then re-print (`execute`
    `[>]`). Run the relay loop.
 2. On DONE with `RESULT: pass <hash>` → re-print (`execute` and `commit` `[x]` with the hash),
@@ -309,6 +312,6 @@ plus the absolute `audit.md` path — then re-prints (`plan (interrogate)` `[>]`
   the checklist has no row for it. The status checklist's rows carry only stage names, state
   markers, artifact paths and commit hashes.
 - **Commit, never push.** The execute agent commits implementation paths only, on the
-  current branch; `.zi/` artifacts are never staged.
+  current branch, with a message per `commit-message.md`; `.zi/` artifacts are never staged.
 - Start this command from a **fresh session** — the orchestrator's own context should hold
   nothing but this run.

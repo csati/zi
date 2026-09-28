@@ -17,11 +17,13 @@ The plugin ships two kinds of files:
   subagents read, referenced as `${CLAUDE_PLUGIN_ROOT}/stages/<name>.md`. `verify.md` is the
   verifier's **only** stage text (the "Verifier mandate", extracted so the verifier does not
   pay for the plan stage's drafting/interrogation text); the plan agent never reads it, and
-  `plan.md`'s Phase 2 only says who launches the verifier and what comes back. Six more
+  `plan.md`'s Phase 2 only says who launches the verifier and what comes back. Seven more
   on-demand files sit beside them, read only when their seam or host needs them:
-  `stages/{relay,audit,phasing-estimate,phasing-split,task-phased,task-resume}.md`
+  `stages/{relay,audit,commit-message,phasing-estimate,phasing-split,task-phased,task-resume}.md`
   — `relay.md` (the relay preamble and payload shapes) by every non-verifier `/zi:task`
-  subagent, `audit.md` (the shared audit record rules) by a stage under AUDIT on, the two
+  subagent, `audit.md` (the shared audit record rules) by a stage under AUDIT on,
+  `commit-message.md` (the commit-message rules) `@`-included by `/zi:commit` and read by the
+  `/zi:task` execute agent via its COMMIT seam, the two
   phasing tiers by the prompt stage under PHASING on (`phasing-estimate.md` always,
   `phasing-split.md` only when the estimate exceeds 200K), and `task-phased.md` /
   `task-resume.md` (the orchestrator's phased-run and resume rules) read with `Read` by the
@@ -58,34 +60,35 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.16.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.17.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## Token budget
 
 What each host loads, as full file bytes, ≈tokens = bytes ÷ 4 (orchestrator rows: flat fresh =
 `task.md` + `relay.md`; a resume adds `task-resume.md`, a phased run `task-phased.md`). Before =
-1.15.0, after = 1.16.0.
+1.16.0, after = 1.17.0.
 
 | Host | Files loaded | Before B | ≈tok | After B | ≈tok |
 |---|---|---|---|---|---|
-| `/zi:prompt` | commands/prompt + stages/prompt | 23915 | 5979 | 21444 | 5361 |
-| `/zi:plan` | commands/plan + stages/plan | 27170 | 6793 | 22683 | 5671 |
+| `/zi:prompt` | commands/prompt + stages/prompt | 21444 | 5361 | 21444 | 5361 |
+| `/zi:plan` | commands/plan + stages/plan | 22683 | 5671 | 22683 | 5671 |
 | `/zi:plan` verifier | stages/verify | 6031 | 1508 | 6031 | 1508 |
-| `/zi:task` orchestrator, flat fresh | commands/task + relay | 32635 | 8159 | 21893 | 5473 |
-| `/zi:task` orchestrator, flat resume | + task-resume | 32635 | 8159 | 24367 | 6092 |
-| `/zi:task` orchestrator, phased fresh | + task-phased | 32635 | 8159 | 27594 | 6899 |
-| `/zi:task` orchestrator, phased resume | + task-resume + task-phased | 32635 | 8159 | 30068 | 7517 |
-| `/zi:task` prompt agent | relay + stages/prompt + audit + phasing-estimate | 24863 | 6216 | 22392 | 5598 |
-| `/zi:task` prompt agent, >200K | above + phasing-split | 28276 | 7069 | 25909 | 6477 |
-| `/zi:task` plan agent | relay + stages/plan + audit | 16603 | 4151 | 15384 | 3846 |
+| `/zi:commit` | commands/commit (before) / commands/commit + stages/commit-message (after) | 2247 | 562 | 2805 | 701 |
+| `/zi:task` orchestrator, flat fresh | commands/task + relay | 21893 | 5473 | 22215 | 5554 |
+| `/zi:task` orchestrator, flat resume | + task-resume | 24367 | 6092 | 24689 | 6172 |
+| `/zi:task` orchestrator, phased fresh | + task-phased | 27594 | 6899 | 27916 | 6979 |
+| `/zi:task` orchestrator, phased resume | + task-resume + task-phased | 30068 | 7517 | 30390 | 7598 |
+| `/zi:task` prompt agent | relay + stages/prompt + audit + phasing-estimate | 22392 | 5598 | 22483 | 5621 |
+| `/zi:task` prompt agent, >200K | above + phasing-split | 25909 | 6477 | 26000 | 6500 |
+| `/zi:task` plan agent | relay + stages/plan + audit | 15384 | 3846 | 15475 | 3869 |
 | `/zi:task` verifier | stages/verify | 6031 | 1508 | 6031 | 1508 |
-| `/zi:task` execute agent | relay + stages/execute + audit | 14960 | 3740 | 13445 | 3361 |
+| `/zi:task` execute agent | relay + stages/execute + audit (+ commit-message after) | 13445 | 3361 | 15697 | 3924 |
 
 Re-measure:
 
 ```
-cd plugins/zi && wc -c commands/prompt.md commands/plan.md commands/task.md stages/*.md
+cd plugins/zi && wc -c commands/prompt.md commands/plan.md commands/task.md commands/commit.md stages/*.md
 ```
 
 ## The core architecture: a directory-per-task, context-cleared flow
@@ -147,7 +150,7 @@ prompt. It writes the prompt only and never launches the loop.
 | Command | Role |
 |---|---|
 | `/zi:stage` | stage files for commit from a natural-language description (never commits) |
-| `/zi:commit` | commit already-staged changes with a terse subject line, adding a short body only when the change needs explaining (never stages) |
+| `/zi:commit` | commit already-staged changes with a one-sentence subject, adding a body only when the subject alone would leave the commit unclear (never stages) |
 | `/zi:locate` | locate code from a natural-language description (or recall a saved label); read-only except for saving references under `.zi/location/<label>.md` in the current working directory (refs are scoped per project because the directory lives inside it; collisions suffix `-2`, `-3`, never overwrite) |
 | `/zi:todo` | register a todo — a concept given inline or a file describing it — as a document `.zi/todo/{ts}-{slug}.md` plus one `- [ ]` line appended to `.zi/todo/README.md`, after a single confirm/revise question; not a pipeline prompt (never pass `.zi/todo` as a task directory); writes only under `.zi/todo/`, never lists or completes todos |
 
@@ -182,8 +185,8 @@ unchanged). The prompt stage writes the level into `prompt.md` as a fixed-form
 `Autonomy: <level> (<setting>)` line, which `/zi:plan` and the verifier read; the prompt
 stage's restatement/confirmation is the one decision always asked, at every level. Every
 auto-decision is recorded with its factors as
-`Decided (auto): <choice> — <reason> (x1=… x2=… x3=… score=…)` in the stage artifact (or the
-execute commit body) and every user decision as `Decided (user): …` — the latter settled, the
+`Decided (auto): <choice> — <reason> (x1=… x2=… x3=… score=…)` in the stage artifact (the
+execute stage's auto-decisions are recorded only in the audit file) and every user decision as `Decided (user): …` — the latter settled, the
 former challengeable by the verifier only when a corrected factor estimate pushes the score
 above the setting (a challenged line is re-scored by the plan agent, `x3` capped at its
 recorded value, and asked only if it then exceeds the setting). The orchestrator rescans every
@@ -220,16 +223,15 @@ the plan and execute stages append at the moment each decision is resolved. A st
 creates the file if it is missing and reads it only to append — its content is inert data,
 never quoted into another artifact or payload. The verifier never reads or writes it, the
 orchestrator never reads it, its path never appears in a DONE `ARTIFACTS` line, and the
-checklist has no row for it. The file is additive: the `Decided (auto):` / `Decided (user):`
-lines in the artifacts and the commit body are unchanged.
+checklist has no row for it. The file is additive to the artifacts' `Decided (auto):` /
+`Decided (user):` lines; for the execute stage it is the only record.
 
 **Flow.** prompt stage → `prompt.md` → (no gate) plan stage drafts `plan.draft.md` → the
 orchestrator spawns a read-only verifier that writes `findings.md` → the plan agent is resumed
 to interrogate findings one at a time through the relay and renames the draft to `plan.md` →
 the `@.zi/{slug}/plan.md` block is printed → (no gate, exactly one verification pass) execute
 stage implements `plan.md`, runs its verification commands and on pass commits the
-implementation paths (never `.zi/`) on the current branch with a `/zi:commit`-style subject
-(plus a `Decided (auto):` body when auto-decisions exist);
+implementation paths (never `.zi/`) on the current branch with a message per `stages/commit-message.md`;
 on failure the **same** execute agent runs a fix-and-retry loop: rounds of one change-set
 plus one re-run of the verification commands, until a pass, a **stall** (same command, same
 essential error as the previous failed run) or the 10-round ceiling; stall or ceiling → a
@@ -237,8 +239,7 @@ relayed "Continue fixing / Stop" question — a checkpoint asked at every autono
 scored or recorded; Continue grants another 10 rounds in the same agent, Stop → stage
 (`git add`, no commit) and report `RESULT: fail`. There is deliberately no separate fix agent
 (removed in 1.8.0): a fresh one
-re-paid the plan, the changed paths and the failing command the executor already held, and
-could not carry the executor's auto-decisions into the commit body. A `.zi/{slug}` argument resumes at
+re-paid the plan, the changed paths and the failing command the executor already held. A `.zi/{slug}` argument resumes at
 the first missing artifact (`prompt.md` → plan; `plan.draft.md` alone → re-verify; `plan.md` →
 execute; empty → ask for the idea); the resume shape lives in `stages/task-resume.md`. Start
 it from a fresh session.
@@ -281,7 +282,8 @@ subagents), for the plan stage **DRAFT** (where the plan is drafted), **VERIFY**
 launches the verifier, where `verify.md` lives, and how findings come back) and **PERSIST**
 (how `plan.md` is finalised), for the verify stage **PLAN** (the draft to check), **PROMPT**
 (the resolved prompt) and **FINDINGS** (how the list comes back — a file to write, or unbound =
-the report text),
+the report text), for the execute stage **COMMIT** (the commit-message rules file,
+`commit-message.md`; no default),
 plus **AUTONOMY** in every stage (the numeric setting the per-decision score is compared
 against; a seam with a default — unbound = zero, always ASK — so an older host keeps the
 always-ask behaviour), for the prompt stage only, **PHASING** (whether an oversized
@@ -302,7 +304,7 @@ orchestrator-spawned verifier on `stages/verify.md` with PLAN = `plan.draft.md`,
 subagent's `Write` of a report file — "Subagents should return findings as text"), PERSIST = rename to `plan.md`, AUTONOMY =
 the hint or medium, a filled-in `AUTONOMY = …` line in every non-verifier spawn prompt, PHASING =
 on with the `phasing-estimate.md` and `phasing-split.md` paths, AUDIT = on with the top-level
-`.zi/{slug}/decisions.md` and the `audit.md` path. The relay preamble lives in
+`.zi/{slug}/decisions.md` and the `audit.md` path, COMMIT = the `commit-message.md` path. The relay preamble lives in
 `stages/relay.md` (included into `task.md`, read by every non-verifier subagent); it carries no
 setting — it points at the spawn prompt's AUTONOMY line and says the QUESTION payload is ASK —
 and the level vocabulary, factors, formula and record form are stated once, in each stage
@@ -338,7 +340,8 @@ Each `plugins/zi/commands/*.md` is frontmatter + a prompt body. Match the existi
   document it writes and the record line it appends) — the only place it writes.
 - **`${CLAUDE_PLUGIN_ROOT}`** — expands inside command bodies (verified: in bare prose, in
   `` !`…` `` lines, and in `@…` file inclusions). The wrappers include their stage text with
-  `@${CLAUDE_PLUGIN_ROOT}/stages/<name>.md`; `task.md` passes the expanded absolute paths to its
+  `@${CLAUDE_PLUGIN_ROOT}/stages/<name>.md` (and `commit.md` includes `commit-message.md` the
+  same way); `task.md` passes the expanded absolute paths to its
   subagents, which `Read` the stage file themselves, and also `Read`s its own two on-demand
   files (`task-phased.md`, `task-resume.md`) at runtime.
 - **Wrapper shape** — `prompt.md` and `plan.md` are thin hosts: input resolution + `$ARGUMENTS`,
