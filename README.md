@@ -26,7 +26,7 @@ The plugin ships eight slash commands — two planning phases, a one-shot pipeli
 | `/zi:stage <desc>` | your description | staged files | stage files for commit from a natural-language description |
 | `/zi:commit` | staged changes | a commit | commit staged changes with a terse subject, plus a short body only when the diff needs explaining |
 | `/zi:locate <desc>` | a description or saved label | code pointers (+ a saved reference) | locate code from a natural-language description, or recall a saved one by label |
-| `/zi:todo <concept>` | a concept or a file describing it | `.zi/todo/{ts}-{slug}.md` + a line in `.zi/todo/README.md` | register a todo document and a skimmable record entry (never lists or completes) |
+| `/zi:todo <concept>` | a concept or a file describing it | `.zi/todo/{ts}-{slug}.md` + a line in `.zi/todo/README.md` | register a todo document and a skimmable record entry (never lists or completes); the document ends with a cleanup instruction for its implementer |
 
 **Clear context between phases.** Each phase's quality comes from a clean context that sees
 only the prior artifact. Both planning phases are interactive — you run them, answer their
@@ -158,11 +158,17 @@ confirmed rephrasing, and grounded `path:line — why` pointers only when the co
 real code) and one appended checkbox line in the record file `.zi/todo/README.md`, of the form
 `` - [ ] `{ts}-{slug}.md` — <brief description> — effort: <1–2 words> ``. The record file is
 the skimmable index; it is appended to, never rewritten, so boxes you tick by hand survive.
+Every document ends with a `## When done` section telling whoever implements the todo how to
+clean it up: full success → delete the document and its record line; partial → trim the
+document to the remaining work and update its record line; nothing landed → leave both
+untouched; in doubt → treat it as partial.
 
 It is **not a prompt and not a plan**: it never interrogates intent, surfaces risks, plans, or
-touches repo files, and it never lists, completes, or edits todos. To act on a todo later, hand
-the document's path to `/zi:prompt` as a file path or paste its text into `/zi:task`; **never
-pass `.zi/todo` as a task directory**, and don't point `/zi:plan` at a todo document.
+touches repo files, and the command itself never lists, completes, or edits todos — the
+implementer performs the cleanup by following the document's `## When done` section. To act on
+a todo later, hand the document's path to `/zi:prompt` as a file path or paste its text into
+`/zi:task`; **never pass `.zi/todo` as a task directory**, and don't point `/zi:plan` at a todo
+document.
 
 ## Install
 

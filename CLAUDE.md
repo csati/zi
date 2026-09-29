@@ -60,7 +60,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.17.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.18.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## Token budget
@@ -152,7 +152,7 @@ prompt. It writes the prompt only and never launches the loop.
 | `/zi:stage` | stage files for commit from a natural-language description (never commits) |
 | `/zi:commit` | commit already-staged changes with a one-sentence subject, adding a body only when the subject alone would leave the commit unclear (never stages) |
 | `/zi:locate` | locate code from a natural-language description (or recall a saved label); read-only except for saving references under `.zi/location/<label>.md` in the current working directory (refs are scoped per project because the directory lives inside it; collisions suffix `-2`, `-3`, never overwrite) |
-| `/zi:todo` | register a todo — a concept given inline or a file describing it — as a document `.zi/todo/{ts}-{slug}.md` plus one `- [ ]` line appended to `.zi/todo/README.md`, after a single confirm/revise question; not a pipeline prompt (never pass `.zi/todo` as a task directory); writes only under `.zi/todo/`, never lists or completes todos |
+| `/zi:todo` | register a todo — a concept given inline or a file describing it — as a document `.zi/todo/{ts}-{slug}.md` plus one `- [ ]` line appended to `.zi/todo/README.md`, after a single confirm/revise question; not a pipeline prompt (never pass `.zi/todo` as a task directory); writes only under `.zi/todo/`; every document ends with a `## When done` cleanup section for the later implementer — the command itself never lists or completes todos |
 
 ## The `/zi:task` orchestrator and the `stages/` seams
 

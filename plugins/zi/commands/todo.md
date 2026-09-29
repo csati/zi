@@ -1,5 +1,5 @@
 ---
-description: Register a todo — a concept given inline or a file describing it — as a document under .zi/todo/ plus a one-line entry in .zi/todo/README.md, after a single confirmation. It is not a prompt and not a plan; it never lists, completes or edits todos.
+description: Register a todo — a concept given inline or a file describing it — as a document under .zi/todo/ plus a one-line entry in .zi/todo/README.md, after a single confirmation. It is not a prompt and not a plan; it never lists, completes, edits or removes todos — the document carries its own cleanup instruction for whoever later implements it.
 argument-hint: [a todo concept, or a path to a file describing it]
 allowed-tools: Bash(date:*), Bash(mkdir:*), Bash(ls:*), Read, Grep, Glob, AskUserQuestion, Write, Edit
 ---
@@ -73,10 +73,36 @@ missing, run `date +%Y%m%d-%H%M%S` yourself):
      ## Pointers
 
      - <path>:<line> — <why>
+
+     ## When done
+
+     Cleaning up this todo is part of this todo's scope — an in-scope completion step; carry it
+     into any prompt or spec built from this document. Do it automatically, without asking. It
+     concerns this document, `.zi/todo/{TIMESTAMP}-{slug}.md`, and its record line in
+     `.zi/todo/README.md` — the line naming `{TIMESTAMP}-{slug}.md` in backticks, whether its
+     box is `[ ]` or `[x]`.
+
+     - **Full success** (every part implemented and its verification passed): delete this
+       document and remove its record line.
+     - **Partial success** (some parts done): rewrite the body — and prune `## Pointers` — to
+       describe only the remaining work, update `effort` in the frontmatter, and update the
+       record line's brief description and effort. Keep the filename, `created`, `source`, the
+       checkbox state and this section unchanged.
+     - **Nothing landed**: leave this document and its record line untouched.
+     - **When in doubt, treat it as partial.**
+
+     Change `.zi/todo/README.md` only at that one line, with a single targeted edit — never
+     rewrite the file whole. A missing record line does not block deleting or trimming this
+     document.
      ```
 
      The `## Pointers` section is present only when step 1 produced real tool hits; omit it
      otherwise.
+
+     The `## When done` section is always present and always last (directly after the
+     rephrasing when `## Pointers` is omitted); its path and filename are this document's own,
+     filled in like the filename itself. `/zi:todo` only writes it — the cleanup is done later
+     by whoever implements the todo.
    - The **record line** appended to `.zi/todo/README.md`:
 
      ```
@@ -100,6 +126,7 @@ missing, run `date +%Y%m%d-%H%M%S` yourself):
 - **Exactly one confirmation gate** — the confirm/revise question, re-asked only after a
   `Revise` — and no other questions, apart from the "what is the todo?" question on an empty
   argument.
-- No listing, completing, editing or removing todos.
+- No listing, completing, editing or removing todos. Cleanup is done later by whoever
+  implements the todo, following the document's `## When done` section — never by `/zi:todo`.
 - No `.zi/{slug}` or bare-slug resolution: the input is a concept or a file path, nothing else.
 - Do not fabricate pointers or line numbers; they must come from a real tool result.
