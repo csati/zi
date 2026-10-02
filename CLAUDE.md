@@ -60,7 +60,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.18.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.19.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## Token budget
@@ -143,8 +143,8 @@ prompt. It writes the prompt only and never launches the loop.
 |---|---|---|---|
 | `/zi:overnight` | a loop GOAL | `{slug}/overnight.md` | interrogate the goal, generate an unattended never-halt loop-orchestration prompt (never runs the loop) |
 
-`stage` and `commit` are general-purpose git helpers bundled with the plugin, and `locate` and
-`todo` are general-purpose helpers alongside them — handy, but not phases of the
+`stage` and `commit` are general-purpose git helpers bundled with the plugin, and `locate`,
+`todo` and `todo-compact` are general-purpose helpers alongside them — handy, but not phases of the
 `prompt → plan` flow:
 
 | Command | Role |
@@ -153,6 +153,7 @@ prompt. It writes the prompt only and never launches the loop.
 | `/zi:commit` | commit already-staged changes with a one-sentence subject, adding a body only when the subject alone would leave the commit unclear (never stages) |
 | `/zi:locate` | locate code from a natural-language description (or recall a saved label); read-only except for saving references under `.zi/location/<label>.md` in the current working directory (refs are scoped per project because the directory lives inside it; collisions suffix `-2`, `-3`, never overwrite) |
 | `/zi:todo` | register a todo — a concept given inline or a file describing it — as a document `.zi/todo/{ts}-{slug}.md` plus one `- [ ]` line appended to `.zi/todo/README.md`, after a single confirm/revise question; not a pipeline prompt (never pass `.zi/todo` as a task directory); writes only under `.zi/todo/`; every document ends with a `## When done` cleanup section for the later implementer — the command itself never lists or completes todos |
+| `/zi:todo-compact` | check every `.zi/todo/{ts}-{slug}.md` against the codebase with bounded read-only evidence; after one apply/cancel question delete done documents and their record lines, trim partial ones to the remaining work (no added sections; doubt → partial) and leave untouched ones alone; takes no argument; writes only under `.zi/todo/`; never commits |
 
 ## The `/zi:task` orchestrator and the `stages/` seams
 
@@ -338,6 +339,9 @@ Each `plugins/zi/commands/*.md` is frontmatter + a prompt body. Match the existi
   directory — writing under that directory is the *only* write `locate` may do. `/zi:todo`
   likewise declares `Bash(mkdir:*)`, `Bash(ls:*)` and `Edit` for its `.zi/todo/` store (the
   document it writes and the record line it appends) — the only place it writes.
+  `/zi:todo-compact` declares `Bash(ls:*)`, `Bash(git log:*)` (read-only evidence) plus `Write`
+  and `Edit` for its `.zi/todo/` rewrites, and deliberately does not pre-approve `rm`, so each
+  deletion goes through the user's normal permission flow.
 - **`${CLAUDE_PLUGIN_ROOT}`** — expands inside command bodies (verified: in bare prose, in
   `` !`…` `` lines, and in `@…` file inclusions). The wrappers include their stage text with
   `@${CLAUDE_PLUGIN_ROOT}/stages/<name>.md` (and `commit.md` includes `commit-message.md` the

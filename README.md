@@ -15,7 +15,7 @@ finds the first automatically (`prompt.md` → `plan.md`).
 
 ## The commands
 
-The plugin ships eight slash commands — two planning phases, a one-shot pipeline, a standalone overnight-loop generator, two git helpers, a code locator, and a todo registrar:
+The plugin ships nine slash commands — two planning phases, a one-shot pipeline, a standalone overnight-loop generator, two git helpers, a code locator, a todo registrar, and a todo compactor:
 
 | Command | Reads | Produces | Role |
 |---------|-------|----------|------|
@@ -27,6 +27,7 @@ The plugin ships eight slash commands — two planning phases, a one-shot pipeli
 | `/zi:commit` | staged changes | a commit | commit staged changes with a terse subject, plus a short body only when the diff needs explaining |
 | `/zi:locate <desc>` | a description or saved label | code pointers (+ a saved reference) | locate code from a natural-language description, or recall a saved one by label |
 | `/zi:todo <concept>` | a concept or a file describing it | `.zi/todo/{ts}-{slug}.md` + a line in `.zi/todo/README.md` | register a todo document and a skimmable record entry (never lists or completes); the document ends with a cleanup instruction for its implementer |
+| `/zi:todo-compact` | `.zi/todo/` documents + the codebase | deleted / trimmed todo documents and updated lines in `.zi/todo/README.md` | check each todo against the codebase and, after one confirmation, delete done ones and trim partial ones to their remaining work |
 
 **Clear context between phases.** Each phase's quality comes from a clean context that sees
 only the prior artifact. Both planning phases are interactive — you run them, answer their
@@ -165,10 +166,27 @@ untouched; in doubt → treat it as partial.
 
 It is **not a prompt and not a plan**: it never interrogates intent, surfaces risks, plans, or
 touches repo files, and the command itself never lists, completes, or edits todos — the
-implementer performs the cleanup by following the document's `## When done` section. To act on
+implementer performs the cleanup by following the document's `## When done` section, or
+`/zi:todo-compact` does it in bulk across the whole store. To act on
 a todo later, hand the document's path to `/zi:prompt` as a file path or paste its text into
 `/zi:task`; **never pass `.zi/todo` as a task directory**, and don't point `/zi:plan` at a todo
 document.
+
+### `/zi:todo-compact` — prune done todos
+
+Takes no argument. Checks every todo document under `.zi/todo/` (everything but `README.md`)
+against the current codebase with bounded read-only evidence — the document's pointers and the
+paths and symbols it names, plus `git log` as supporting evidence — and gives each a verdict:
+**done** (every part has concrete evidence) → the document is deleted and its record line
+removed; **partial** → the document is trimmed in place to the remaining work, its pointers
+re-checked, `effort` and the record line updated; **untouched** → nothing changes. In doubt, a
+document is treated as partial: only parts with concrete evidence of completion are removed.
+A trimmed document gains no "Done" or "Progress" section — done work simply disappears from it.
+
+All verdicts are put to you in exactly **one** apply/cancel question; nothing is written or
+deleted before you pick *Apply*, and when nothing would change it just prints the list. It
+writes only under `.zi/todo/`, never commits, and deliberately does not pre-approve `rm`, so
+each deletion goes through your normal permission prompt.
 
 ## Install
 
@@ -211,7 +229,7 @@ zi/                                   ← repo root = the "ncs-plugins" marketpl
 ├── .claude-plugin/marketplace.json    ← the catalog (lists the zi plugin)
 ├── plugins/zi/                       ← the plugin itself
 │   ├── .claude-plugin/plugin.json
-│   ├── commands/   prompt, plan, task, overnight, stage, commit, locate, todo
+│   ├── commands/   prompt, plan, task, overnight, stage, commit, locate, todo, todo-compact
 │   └── stages/     prompt, plan, verify, execute   ← shared stage text read by prompt, plan and task
 ├── README.md
 ├── CLAUDE.md
@@ -228,7 +246,7 @@ After install, commands are namespaced **`/zi:<command>`** (e.g. `/zi:prompt`).
   pushes), so invoke it only when that is what you want.
 - **Independence is the point.** `/zi:plan`'s verification runs in a fresh subagent with no
   view of the planning conversation — it reports findings, it never silently rewrites the plan.
-- **`stage`, `commit`, `locate`, and `todo`** are general-purpose helpers bundled alongside the
-  planning commands — handy, but not part of the `prompt → plan` flow itself. `locate` is read-only
-  for your repo (it only writes recallable references under `.zi/location/`), and `todo` writes
-  only under `.zi/todo/`.
+- **`stage`, `commit`, `locate`, `todo`, and `todo-compact`** are general-purpose helpers bundled
+  alongside the planning commands — handy, but not part of the `prompt → plan` flow itself.
+  `locate` is read-only for your repo (it only writes recallable references under
+  `.zi/location/`), and `todo` and `todo-compact` write only under `.zi/todo/`.
