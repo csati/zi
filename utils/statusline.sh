@@ -1,5 +1,5 @@
 #!/bin/bash
-# Claude Code status line: model | dir | git branch | context % | weekly budget
+# Claude Code status line: model | dir | git branch | context % | 5h limit | weekly budget
 # Receives session JSON on stdin. See https://code.claude.com/docs/en/statusline
 
 input=$(cat)
@@ -9,6 +9,8 @@ DIR=$(printf '%s' "$input" | jq -r '.workspace.current_dir // .cwd // "."')
 PCT=$(printf '%s' "$input" | jq -r '.context_window.used_percentage // empty')
 WEEK_USED=$(printf '%s' "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
 WEEK_RESET=$(printf '%s' "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')
+FIVE_USED=$(printf '%s' "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
+FIVE_RESET=$(printf '%s' "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')
 
 # Git branch (worktree-aware), falls back to the repo's own lookup.
 BRANCH=$(printf '%s' "$input" | jq -r '.worktree.branch // empty')
@@ -57,35 +59,53 @@ if [ -n "$PCT" ] && [ "$PCT" != "null" ]; then
   OUT="${OUT} ${DIM}|${RESET} ${COLOR}${BAR} ${PCT_INT}%${RESET}${DIM} ctx${RESET}"
 fi
 
-# Weekly budget: the rate (relative to the plan's average weekly rate) at which
-# the remaining quota can be spent so it hits exactly 100% at the reset.
-#   pace = remaining_quota% / (time_left / 7 days * 100)
+# Rate-limit pace: the rate (relative to the plan's average rate over the window)
+# at which the remaining quota can be spent so it hits exactly 100% at the reset.
+#   pace = remaining_quota% / (time_left / window * 100)
+# window = 5 hours for the "5h" segment, 7 days for the "budget" segment.
 # e.g. 85% used with 16.8h (10% of the week) left -> 15 / 10 = 150%.
 # rate_limits is only present for Pro/Max after the first API response.
-if [ -n "$WEEK_USED" ] && [ "$WEEK_USED" != "null" ] && [ -n "$WEEK_RESET" ] && [ "$WEEK_RESET" != "null" ]; then
-  NOW=$(date +%s)
-  LEFT=$((WEEK_RESET - NOW))
-  WEEK_USED_INT=${WEEK_USED%.*}
-  [ -z "$WEEK_USED_INT" ] && WEEK_USED_INT=0
-  if [ "$LEFT" -gt 0 ]; then
-    # Integer math: remaining% * 604800 / left_seconds
-    PACE=$(( (100 - WEEK_USED_INT) * 604800 / LEFT ))
-    if [ "$PACE" -ge 100 ]; then
-      COLOR=$GREEN
-    elif [ "$PACE" -ge 50 ]; then
-      COLOR=$YELLOW
-    else
-      COLOR=$RED
+# Usage: rate_segment <used> <resets_at> <window_seconds> <label>
+rate_segment() {
+  local used=$1 reset=$2 window=$3 label=$4
+  local now left used_int pace color tl
+  if [ -n "$used" ] && [ "$used" != "null" ] && [ -n "$reset" ] && [ "$reset" != "null" ]; then
+    now=$(date +%s)
+    left=$((reset - now))
+    used_int=${used%.*}
+    [ -z "$used_int" ] && used_int=0
+    if [ "$left" -gt 0 ]; then
+      # Integer math: remaining% * window / left_seconds
+      pace=$(( (100 - used_int) * window / left ))
+      if [ "$pace" -ge 100 ]; then
+        color=$GREEN
+      elif [ "$pace" -ge 50 ]; then
+        color=$YELLOW
+      else
+        color=$RED
+      fi
+      [ "$pace" -gt 999 ] && pace=">999"
+      if [ "$window" -ge 86400 ]; then
+        # Days with one decimal, or rounded hours if < 1 day
+        if [ "$left" -ge 84600 ]; then  # >= 23.5h, so hours never round to "24h"
+          tl=$(awk -v s="$left" 'BEGIN { printf "%.1fd", s / 86400 }')
+        else
+          tl="$(( (left + 1800) / 3600 ))h"
+        fi
+      else
+        # Hours and zero-padded minutes, or minutes if < 1h (floored)
+        if [ "$left" -ge 3600 ]; then
+          tl=$(printf '%dh%02dm' $((left / 3600)) $(((left % 3600) / 60)))
+        else
+          tl="$((left / 60))m"
+        fi
+      fi
+      OUT="${OUT} ${DIM}|${RESET} ${color}${pace}% ${tl}${RESET}${DIM} ${label}${RESET}"
     fi
-    [ "$PACE" -gt 999 ] && PACE=">999"
-    # Time left until the reset: days with one decimal, or rounded hours if < 1 day
-    if [ "$LEFT" -ge 84600 ]; then  # >= 23.5h, so hours never round to "24h"
-      TL=$(awk -v s="$LEFT" 'BEGIN { printf "%.1fd", s / 86400 }')
-    else
-      TL="$(( (LEFT + 1800) / 3600 ))h"
-    fi
-    OUT="${OUT} ${DIM}|${RESET} ${COLOR}${PACE}% ${TL}${RESET}${DIM} budget${RESET}"
   fi
-fi
+}
+
+rate_segment "$FIVE_USED" "$FIVE_RESET" 18000 5h
+rate_segment "$WEEK_USED" "$WEEK_RESET" 604800 budget
 
 printf '%s\n' "$OUT"
