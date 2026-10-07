@@ -1,6 +1,6 @@
 ---
-description: One-shot prompt → plan → execute pipeline. Runs the prompt, plan and execute stages each in a fresh subagent, relays every stage question to you, persists .zi/{slug}/prompt.md, findings.md and plan.md, then implements the plan and commits on the current branch (never pushes). Oversized implementations are split into .zi/{slug}/phase-NN/ directories that are planned, executed and committed one after another. Resumes a .zi/{slug} task directory at its first missing artifact — per phase when phased. Start it from a fresh session.
-argument-hint: [rough idea, or a .zi/{slug} task directory / bare slug to resume]
+description: One-shot prompt → plan → execute pipeline. Runs the prompt, plan and execute stages each in a fresh subagent, relays every stage question to you, persists .zi/{slug}/prompt.md, findings.md and plan.md, then implements the plan and commits on the current branch (never pushes). Oversized implementations are split into .zi/{slug}/phase-NN/ directories that are planned, executed and committed one after another. Resumes a .zi/{slug} task directory at its first missing artifact — per phase when phased; a flat pass writes a .zi/{slug}/commit marker, so a committed task resumes as complete. With the manual execution hint it stops after the verified plan instead of implementing it and hands off to /zi:mentor. Start it from a fresh session.
+argument-hint: [rough idea, or a .zi/{slug} task directory / bare slug to resume; optional autonomy hint and `manual execution` hint]
 allowed-tools: Bash(date:*), Read, Grep, Glob, Agent, SendMessage, AskUserQuestion, Write, Edit
 ---
 
@@ -10,7 +10,8 @@ Run the whole `prompt → plan → execute` flow unattended except for the quest
 themselves raise. You are the **orchestrator**: you spawn one fresh subagent per stage, relay
 its questions to the user, and pass nothing across stage boundaries except `.zi/{slug}/…`
 paths. You never read artifact bodies, never restate them, and never do stage work yourself.
-This is the plugin's one command that ends in a commit.
+This is one of the plugin's two commands that end in a commit (the other is `/zi:mentor`);
+under manual execution it stops before implementing.
 
 ## Invocation values
 
@@ -55,10 +56,23 @@ punctuation/whitespace that joined the span to its neighbours — leaving the re
 record **`LEVEL = <level> (<setting>), from hint`** with `zero` = 0.0, `low` = 0.25,
 `medium` = 0.5, `high` = 0.75, `max` = 1.0. No hint → **`LEVEL = medium (0.5), default`**.
 Hints naming different levels → ask the user which applies (one `AskUserQuestion`) before
-anything else. An argument empty after stripping (`/zi:task with high autonomy`) is empty
-under rule 1, keeping `LEVEL`. Rules 1–3 then apply unchanged, so
+anything else except the `Execution: manual` line. An argument empty after stripping
+(`/zi:task with high autonomy`) is empty under rule 1, keeping `LEVEL`. Rules 1–3 then apply unchanged, so
 `/zi:task .zi/{slug} with high autonomy` resumes at high; a resume without a hint binds the
 default (you never read `prompt.md`, so its `Autonomy:` line may differ — accepted).
+
+**Manual hint**, independent of the autonomy hint and detected in the same pass: the phrase
+`manual execution`, or the word `execution` joined to `manual` by `:` or `=`
+(`execution: manual`, `execution=manual`); case-insensitive. Strip the span exactly as for the
+autonomy hint — the hint words, an immediately preceding connective (`with`, `at`, `under`,
+`using`, `in`), and the punctuation/whitespace that joined the span to its neighbours — leaving
+the rest verbatim, and record **`MANUAL = on`**; no manual hint → **`MANUAL = off`**. It is
+detected **in the argument only** (the relay-loop rescan is autonomy-only). When detected,
+print exactly one line `Execution: manual` immediately after hint detection, before any
+`AskUserQuestion`, pre-print or spawn — on a fresh run and on a resume alike. An argument empty
+after stripping both hints is empty under rule 1, keeping both bindings. Under `MANUAL = on`
+the run goes unchanged up to the persisted `plan.md`, and every execute stage becomes the
+manual stop (Execute stage).
 
 1. **Empty** → ask the user (via `AskUserQuestion`) what they want to run. Never invent a topic.
 2. **A task directory** — a `.zi/{slug}/` path (with or without trailing slash) or a bare
@@ -67,13 +81,15 @@ default (you never read `prompt.md`, so its `Autonomy:` line may differ — acce
    pre-marked checklist once, before the first spawn; re-print at every transition as usual.
    A task with `phase-*/` directories is **phased** and follows the "Phased resume" section of
    `task-phased.md`. Otherwise (**flat**) **resume at the first missing artifact**:
+   - `commit` present (`.zi/{slug}/commit`) → the task is **complete**: pre-print the checklist
+     per `task-resume.md` (every row `[x]`), report that the task is complete, spawn nothing.
    - no `prompt.md` → ask the user for the idea, then run the **prompt stage** exactly as for
      raw text. The prompt stage always creates a **fresh** `.zi/{TIMESTAMP}-{slug}/`; the given
      directory is left alone.
    - `prompt.md` present, no `plan.draft.md`, no `plan.md` → **plan stage** (`draft` entry).
    - `plan.draft.md` present, no `plan.md` → **re-verify**: spawn the verifier, then a fresh
      plan agent at the `interrogate` entry point.
-   - `plan.md` present → **execute stage**.
+   - `plan.md` present → **execute stage** (under `MANUAL = on`, the manual stop).
 3. **Anything else** → the argument is the raw idea (text, or a path to a file outside `.zi/`
    that the prompt stage will read) → **prompt stage**.
 
@@ -108,8 +124,9 @@ Then:
    - <header>: <chosen label, or the user's free text>
    ```
 
-   **Rescan** — for answers to the **prompt-stage** agent only, first apply the Argument hint
-   grammar to each answer text; a hint rebinds `LEVEL` to `<level> (<setting>), from hint` for
+   **Rescan** — for answers to the **prompt-stage** agent only, first apply the Argument
+   autonomy-hint grammar to each answer text (an autonomy-only rescan: the manual hint is
+   never detected here); a hint rebinds `LEVEL` to `<level> (<setting>), from hint` for
    every later spawn in this run (every phase included). The answer is still relayed verbatim.
 2. **Conforming DONE** → proceed with the stage flow below.
 3. **Anything else** — prose, a missing `STATUS` line, malformed lists, a plan-stage DONE whose
@@ -183,7 +200,9 @@ else:
 No print while a question is relayed or answers are sent back, nor on the non-conforming path
 (a nudge is silent; the escalation's `AskUserQuestion` is the feedback). The fenced
 `@.zi/{slug}/plan.md` block of plan-stage step 4 is printed **in addition to** the checklist,
-between the plan-DONE print and the execute-spawn print.
+between the plan-DONE print and the execute-spawn print. Under `MANUAL = on` the block is
+followed by the manual stop's two fenced lines and the run ends — there is no execute-spawn
+print.
 
 A flat run mid-way, printed right after the execute spawn:
 
@@ -269,7 +288,8 @@ one of two shapes:
    @.zi/20260101-000000-example/plan.md
    ```
 
-   Then **immediately** go to the execute stage. Exactly one verification pass; there is no
+   Then go to the execute stage — which under `MANUAL = on` is the manual stop. Exactly one
+   verification pass; there is no
    Execute-now / another-reviewer / Stop question.
 
 **Re-verify entry** (resume with a lone `plan.draft.md`): run steps 2–4, except that step 3
@@ -280,6 +300,25 @@ plus the absolute `audit.md` path — then re-prints (`plan (interrogate)` `[>]`
 
 ### Execute stage
 
+**Manual stop** (under `MANUAL = on`, before step 1): spawn nothing. After the `@<plan path>`
+block — already printed by plan-stage step 4, or, on a resume that lands here, printed now,
+after the pre-print — print two more fenced code blocks, each on its own and with the actual
+paths (never the literal `{slug}`):
+
+```
+/zi:mentor .zi/20260101-000000-example/plan.md
+```
+
+```
+/zi:task .zi/20260101-000000-example manual execution
+```
+
+The first names the actual plan path; the second is the resume command, followed by
+` with <level> autonomy` when `LEVEL` was bound `from hint` (a rescan rebind included) and by
+nothing when it is `default`. Then end the run: no checklist re-print (the `execute` and
+`commit` rows stay `[ ]`; no marker is written), no further output. Phased runs reach this
+same rule through `task-phased.md`.
+
 1. Spawn a fresh `general-purpose` execute agent. Its prompt contains: the relay lines;
    "Read and follow `<absolute execute-stage path>`"; the plan path `.zi/{slug}/plan.md`;
    **ASK = the relay**; **AUTONOMY = the filled-in AUTONOMY line**; and
@@ -287,8 +326,10 @@ plus the absolute `audit.md` path — then re-prints (`plan (interrogate)` `[>]`
    **COMMIT = the absolute `commit-message.md` path**. Its git and
    verification commands run through the user's normal permissions. Then re-print (`execute`
    `[>]`). Run the relay loop.
-2. On DONE with `RESULT: pass <hash>` → re-print (`execute` and `commit` `[x]` with the hash),
-   then report the plan path and the commit hash. Done.
+2. On DONE with `RESULT: pass <hash>` → for a **flat** task first write the one-line file
+   `.zi/{slug}/commit` containing the hash (`Write`; the marker write gets no print of its
+   own), then re-print (`execute` and `commit` `[x]` with the hash), then report the plan path
+   and the commit hash. Done. (Phased tasks write `P/commit` per `task-phased.md`.)
 3. On DONE with `RESULT: fail` — which arrives only after the user answered "Stop" on the
    execute agent's stall question or the agent could not run its verification at all —
    re-print (`execute` and `commit` `[!]`), then report the failing `COMMAND` and that the work
@@ -311,6 +352,10 @@ plus the absolute `audit.md` path — then re-prints (`plan (interrogate)` `[>]`
   under `.zi/`) — `decisions.md` included: the orchestrator never reads the audit file, and
   the checklist has no row for it. The status checklist's rows carry only stage names, state
   markers, artifact paths and commit hashes.
+- **Manual execution.** Under `MANUAL = on` the orchestrator never spawns the execute agent.
+- **Markers are the only writes.** The two `commit` markers — flat `.zi/{slug}/commit`, phased
+  `.zi/{slug}/phase-NN/commit` — are the only files the orchestrator writes; their presence is
+  checked with `Glob` only, never read back.
 - **Commit, never push.** The execute agent commits implementation paths only, on the
   current branch, with a message per `commit-message.md`; `.zi/` artifacts are never staged.
 - Start this command from a **fresh session** — the orchestrator's own context should hold

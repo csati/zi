@@ -22,7 +22,7 @@ The plugin ships two kinds of files:
   `stages/{relay,audit,commit-message,phasing-estimate,phasing-split,task-phased,task-resume}.md`
   — `relay.md` (the relay preamble and payload shapes) by every non-verifier `/zi:task`
   subagent, `audit.md` (the shared audit record rules) by a stage under AUDIT on,
-  `commit-message.md` (the commit-message rules) `@`-included by `/zi:commit` and read by the
+  `commit-message.md` (the commit-message rules) `@`-included by `/zi:commit` and `/zi:mentor` and read by the
   `/zi:task` execute agent via its COMMIT seam, the two
   phasing tiers by the prompt stage under PHASING on (`phasing-estimate.md` always,
   `phasing-split.md` only when the estimate exceeds 200K), and `task-phased.md` /
@@ -60,7 +60,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.20.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.21.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## Token budget
@@ -84,11 +84,12 @@ What each host loads, as full file bytes, ≈tokens = bytes ÷ 4 (orchestrator r
 | `/zi:task` plan agent | relay + stages/plan + audit | 15384 | 3846 | 15475 | 3869 |
 | `/zi:task` verifier | stages/verify | 6031 | 1508 | 6031 | 1508 |
 | `/zi:task` execute agent | relay + stages/execute + audit (+ commit-message after) | 13445 | 3361 | 15697 | 3924 |
+| `/zi:mentor` | commands/mentor + stages/commit-message | — | — | 7120 | 1780 |
 
 Re-measure:
 
 ```
-cd plugins/zi && wc -c commands/prompt.md commands/plan.md commands/task.md commands/commit.md stages/*.md
+cd plugins/zi && wc -c commands/prompt.md commands/plan.md commands/task.md commands/commit.md commands/mentor.md stages/*.md
 ```
 
 ## The core architecture: a directory-per-task, context-cleared flow
@@ -112,6 +113,8 @@ reviewer* and repeat. Execution is always a user-chosen final step — the comma
 on its own. There is no self-committing back half in the `prompt → plan` flow itself;
 **`/zi:task` is the deliberate exception** — it runs the same stages one-shot and ends by
 committing on the current branch (never pushing). See "The `/zi:task` orchestrator" below.
+`/zi:mentor` also ends in a commit — but at the end of a tutoring loop in which the user
+implements the plan themselves.
 
 The task directory is load-bearing. When `/zi:plan` is given a prompt that lives **inside an
 existing `.zi/{slug}/` directory**, it writes `plan.md` as a **sibling** in that same directory
@@ -125,7 +128,8 @@ an artifact out of its task directory breaks how the next phase locates its inpu
 |---|---|---|---|
 | `/zi:prompt` | a rough idea | `{slug}/prompt.md` | interrogate intent, surface flaws/side effects, save refined prompt |
 | `/zi:plan` | `{slug}/prompt.md`, a task-dir reference, or inline text | `{slug}/plan.md` | draft a plan, independently verify it (repeatable), then by user choice execute it, exit & persist, or re-review |
-| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume — either optionally carrying an autonomy hint (`with high autonomy`, `autonomy: max`) | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, `{slug}/decisions.md` (one top-level audit file, also when phased), a commit — or, when phased, `{slug}/phase-NN/{prompt,findings,plan}.md` + `{slug}/phase-NN/commit` per phase | one-shot prompt → plan → execute, each stage in a fresh subagent (four per chain: prompt, plan, verifier, execute — the plan agent is resumed for interrogation, the execute agent fixes its own failures in a bounded loop and asks on a stall), questions relayed to the user; appends every resolved decision to a per-task audit file; commits on the current branch — one chain and one commit per phase when the estimate exceeds 200K |
+| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume — either optionally carrying an autonomy hint (`with high autonomy`, `autonomy: max`) and/or the `manual execution` hint (stop at the verified `plan.md` and hand off to `/zi:mentor`) | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, `{slug}/decisions.md` (one top-level audit file, also when phased), a commit + the flat `{slug}/commit` marker — or, when phased, `{slug}/phase-NN/{prompt,findings,plan}.md` + `{slug}/phase-NN/commit` per phase | one-shot prompt → plan → execute, each stage in a fresh subagent (four per chain: prompt, plan, verifier, execute — the plan agent is resumed for interrogation, the execute agent fixes its own failures in a bounded loop and asks on a stall), questions relayed to the user; appends every resolved decision to a per-task audit file; commits on the current branch — one chain and one commit per phase when the estimate exceeds 200K |
+| `/zi:mentor` | a `plan.md`, a `.zi/{slug}` task dir or a bare slug (phased: the lowest phase without `commit`) | a commit + the sibling `commit` marker of a plan under `.zi/` | tutoring loop: one small step per cycle (`Done — check it` / `Give me a hint` / `Apply the fix for me`), review of each step, the plan's verification once at the end, commit on the current branch per `stages/commit-message.md` |
 
 Note: `plan.md`'s frontmatter `description` contrasts itself with a fuller
 `prompt→research→prd→decompose` pipeline. That larger pipeline is **aspirational/comparative
@@ -240,9 +244,18 @@ relayed "Continue fixing / Stop" question — a checkpoint asked at every autono
 scored or recorded; Continue grants another 10 rounds in the same agent, Stop → stage
 (`git add`, no commit) and report `RESULT: fail`. There is deliberately no separate fix agent
 (removed in 1.8.0): a fresh one
-re-paid the plan, the changed paths and the failing command the executor already held. A `.zi/{slug}` argument resumes at
-the first missing artifact (`prompt.md` → plan; `plan.draft.md` alone → re-verify; `plan.md` →
-execute; empty → ask for the idea); the resume shape lives in `stages/task-resume.md`. Start
+re-paid the plan, the changed paths and the failing command the executor already held. On a
+flat pass the orchestrator writes the one-line marker `.zi/{slug}/commit` holding the hash.
+**Manual execution**: a `manual execution` hint in the argument (`execution: manual`,
+`execution=manual`; argument only, never rescanned) binds `MANUAL = on`, prints
+`Execution: manual` first, and turns every execute stage into a **manual stop** — no execute
+spawn; after the `@…/plan.md` block it prints the fenced `/zi:mentor <plan path>` and
+`/zi:task .zi/<slug> manual execution` (plus the autonomy hint when one was given) lines and
+ends the run. `/zi:mentor` writes the same `commit` marker, so a mentored stage and an executed
+one look identical to a resume. A `.zi/{slug}` argument resumes at
+the first missing artifact (`commit` → the task is complete; `prompt.md` → plan;
+`plan.draft.md` alone → re-verify; `plan.md` → execute, or the manual stop; empty → ask for the
+idea); the resume shape lives in `stages/task-resume.md`. Start
 it from a fresh session.
 
 **Phasing.** The prompt stage has a **PHASING** seam (default when unbound: **off** — always a
@@ -263,8 +276,8 @@ decision lines that constrain it). The orchestrator reads the multi-path `ARTIFA
 the `phase-NN` directories, and runs the unchanged plan → verify → interrogate → execute
 chain **once per phase in order** with every artifact path rewritten to `phase-NN/…` and fresh
 agents per phase; each phase commits on its own, after which the orchestrator writes the
-one-line marker `.zi/{slug}/phase-NN/commit` holding the hash — the only file it ever writes,
-checked by `Glob` presence only. A phase's `RESULT: fail` (only after the user stops its fix
+one-line marker `.zi/{slug}/phase-NN/commit` holding the hash — this and the flat
+`.zi/{slug}/commit` marker are the only files it ever writes, checked by `Glob` presence only. A phase's `RESULT: fail` (only after the user stops its fix
 loop) **halts** the run (later phases never start; earlier commits stay; work is staged, not committed). Resuming a phased `.zi/{slug}`
 picks the lowest-numbered phase without `commit` and applies the per-artifact rules inside it;
 all phases marked → the task is reported complete; a phase directory lacking `prompt.md` is
@@ -420,7 +433,9 @@ commands:
   The commands never implement on their own — `/zi:plan` writes code only when the user
   explicitly picks *execute now* at the end of its run. **`/zi:task` is the deliberate
   exception**: invoking it *is* the decision to implement — it executes the verified plan and
-  commits on the current branch (never pushes) with no further gate.
+  commits on the current branch (never pushes) with no further gate. `/zi:mentor` writes code
+  only when the user picks `Apply the fix for me` (for the current step only) and commits at
+  the end of its loop.
 - **Resolve in code what the code can answer; only ask the user for intent and decisions.**
   Ask decisions and clarifications one question per call, sequentially, via `AskUserQuestion`
   (the `/zi:task` exception: its prompt stage batches mutually independent Phase-1

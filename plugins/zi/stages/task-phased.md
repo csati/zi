@@ -9,8 +9,8 @@ naming several `phase-NN/prompt.md` paths, or a `.zi/{slug}` resume whose `Glob`
 Sort the `phase-NN` directories lexically and pick the **lowest-numbered one without a
 `commit` file** (`.zi/{slug}/phase-NN/commit`). Inside it apply task.md's flat per-artifact
 resume rules (Argument rule 2) — `prompt.md` only → plan stage; a lone `plan.draft.md` →
-re-verify; `plan.md` → execute stage — with every path rewritten as in the "Phased flow"
-section below, then continue the phased flow with every later phase in order. If every phase
+re-verify; `plan.md` → execute stage (under `MANUAL = on`, task.md's manual stop) — with
+every path rewritten as in the "Phased flow" section below, then continue the phased flow with every later phase in order. If every phase
 carries `commit` → report that the task is complete; nothing runs. A phase directory
 **without `prompt.md`** is never routed to the "ask for the idea" rule (that would start an
 unrelated flat task): report the task as malformed, naming that directory, and stop.
@@ -74,12 +74,17 @@ checklist tracks no such artifact.
    verifier, execute); the fenced `@P/plan.md` block is printed per phase with the actual
    path; each phase's execute agent commits on its own under the unchanged execute-stage
    rules — one commit per phase. Whenever those stages say to re-print the checklist, the
-   checklist is in its phased shape and the running phase is the expanded one.
+   checklist is in its phased shape and the running phase is the expanded one. Under
+   `MANUAL = on` the execute stage of the current phase is task.md's manual stop with
+   `P/plan.md` as the plan path; the run ends there and later phases are not started (the
+   printed resume command continues them — a phase committed by `/zi:mentor` carries `P/commit`
+   and is skipped exactly like an executed one).
 2. **Commit marker**: on a phase's `RESULT: pass <hash>` write the one-line file `P/commit`
-   containing the hash (this marker is the only file the orchestrator ever writes, and it never
-   reads it back — resume checks its presence with `Glob` only) **before** the pass-DONE
+   containing the hash (this marker and the flat `.zi/{slug}/commit` marker of task.md's Execute
+   stage are the only files the orchestrator ever writes, and it never reads either back —
+   resume checks their presence with `Glob` only) **before** the pass-DONE
    re-print — that print already shows the phase collapsed to `- [x] phase-NN → <hash>`; the
-   marker write gets no print of its own. Then start the next phase. Flat tasks get no marker.
+   marker write gets no print of its own. Then start the next phase.
 3. **Halt**: on a phase's `RESULT: fail` (which arrives only after the user stopped that
    phase's fix loop, or its verification could not run) stop — never start a later phase.
    That fail DONE's re-print shows the phase row `[!]` with its inner rows as the fail left

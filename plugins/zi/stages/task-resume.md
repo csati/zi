@@ -16,6 +16,14 @@ rules already run, no reads under `.zi/`:
   (you never read it back), so by the same implying-artifact rule a pre-marked phase row
   carries the marker path: `- [x] phase-NN → .zi/{slug}/phase-NN/commit`. No word outside the
   vocabulary (paths, hashes, `failed`) is ever introduced.
+- Flat `commit` (`.zi/{slug}/commit`) → every flat row `[x]`. A row whose own artifact is
+  present carries that artifact's path as above, and the implying-artifact rule still governs
+  the plan rows (`plan (draft)`, `verify`, `plan (interrogate)` → `plan.md` when it exists);
+  the marker path `.zi/{slug}/commit` goes only on rows with no other implying artifact —
+  always `execute` and `commit`, plus any earlier row whose artifacts are all gone (the hash is
+  never read back). The checklist is printed once, followed by the task-complete report; no
+  spawn.
+- Under `MANUAL = on` the `Execution: manual` line precedes this pre-print.
 - Rows are pre-marked by presence only. A re-verify resume (lone `plan.draft.md`, possibly a
   stale `findings.md`) pre-marks `verify` `[x]` if `findings.md` exists and flips it back to
   `[>]` on the verifier spawn print — the latest transition always wins.

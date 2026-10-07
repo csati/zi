@@ -15,13 +15,14 @@ finds the first automatically (`prompt.md` → `plan.md`).
 
 ## The commands
 
-The plugin ships nine slash commands — two planning phases, a one-shot pipeline, a standalone overnight-loop generator, two git helpers, a code locator, a todo registrar, and a todo compactor:
+The plugin ships ten slash commands — two planning phases, a one-shot pipeline, a step-by-step plan mentor, a standalone overnight-loop generator, two git helpers, a code locator, a todo registrar, and a todo compactor:
 
 | Command | Reads | Produces | Role |
 |---------|-------|----------|------|
 | `/zi:prompt <desc>` | a rough idea | `.zi/{slug}/prompt.md` | interrogate intent, surface flaws, save a refined prompt |
 | `/zi:plan <prompt>` | `.zi/{slug}/prompt.md` or inline text | `.zi/{slug}/plan.md` | draft a plan, independently verify it, persist on approval |
-| `/zi:task <idea>` | a rough idea, or a `.zi/{slug}` dir to resume | `prompt.md`, `findings.md`, `plan.md`, `decisions.md` + a commit — or, for oversized work, `phase-NN/` directories each with those three files, a commit and a `commit` marker (plus one top-level `decisions.md`) | run prompt → plan → execute in fresh subagents, relay their questions to you, commit on pass |
+| `/zi:task <idea>` | a rough idea, or a `.zi/{slug}` dir to resume | `prompt.md`, `findings.md`, `plan.md`, `decisions.md` + a commit and a `commit` marker — or, for oversized work, `phase-NN/` directories each with those three files, a commit and a `commit` marker (plus one top-level `decisions.md`) | run prompt → plan → execute in fresh subagents, relay their questions to you, commit on pass |
+| `/zi:mentor <plan>` | a `plan.md`, a `.zi/{slug}` dir or a bare slug | a commit + the `commit` marker beside the plan | tutor you through implementing the plan yourself, one step at a time, then verify and commit |
 | `/zi:overnight <goal>` | a loop GOAL | `.zi/{slug}/overnight.md` | interrogate the goal, generate an unattended never-halt loop-orchestration prompt |
 | `/zi:stage <desc>` | your description | staged files | stage files for commit from a natural-language description |
 | `/zi:commit [desc]` | staged changes, or the working-tree changes your description names | a commit | commit what is staged, or exactly the existing changes matching a description, with a terse subject plus a short body only when the diff needs explaining; never edits files |
@@ -85,6 +86,15 @@ after 10 rounds, it asks you whether to continue fixing (another 10 rounds, with
 you give) or stop. Only when you answer Stop is the work staged, not committed, and you're
 told which command failed.
 
+**Or implement it yourself.** Add `manual execution` (or `execution: manual`,
+`execution=manual`) to the argument and the run prints `Execution: manual` first, then goes
+unchanged up to the verified `plan.md` — and stops there instead of implementing. It prints
+three fenced lines: the `@…/plan.md` mention, `/zi:mentor <plan path>` to work through the plan
+yourself, and the resume command `/zi:task .zi/<slug> manual execution` (plus your autonomy hint,
+if you gave one). The mode is not persisted anywhere — the printed resume command carries it.
+In a phased run each phase stops the same way; once `/zi:mentor` has committed a phase, the
+resume command picks up the next one.
+
 **A run is never silent between questions.** The orchestrator prints a status checklist at
 every stage boundary — which stage is running, what each finished stage produced (an artifact
 path or a commit hash), and for phased runs one row per phase with only the running phase
@@ -121,7 +131,8 @@ and the failing phase's work is left staged. Smaller jobs are untouched by this 
 
 Pass a `.zi/{slug}` directory (or bare slug) instead of an idea to **resume** at the first
 missing artifact: `prompt.md` only → planning; a lone `plan.draft.md` → re-verify; `plan.md` →
-execution; an empty directory → it asks for the idea. A phased task resumes at the lowest
+execution; a `commit` marker → the task is complete (a flat pass writes `.zi/{slug}/commit`);
+an empty directory → it asks for the idea. A phased task resumes at the lowest
 `phase-NN/` without a `commit` marker and applies the same rules inside it, then carries on with
 the later phases. **Start `/zi:task` from a fresh session** — the orchestrator's context should
 hold nothing but the run.
@@ -129,6 +140,19 @@ hold nothing but the run.
 `/zi:prompt`, `/zi:plan` and `/zi:task` all read the same stage text from `plugins/zi/stages/`,
 so the interactive commands and the pipeline cannot drift apart; the verifier gets its own
 `verify.md` so it never reads — or pays for — the planner's text.
+
+### `/zi:mentor` — implement the plan yourself, step by step
+
+Give it a `plan.md`, a `.zi/{slug}` task directory or a bare slug (for a phased task it takes the
+lowest phase without a `commit` marker). It splits the plan into small ordered steps and, for
+each one, tells you what to change, where and why, then asks: **Done — check it**, **Give me a
+hint**, or **Apply the fix for me**. On "Done" it reviews your diff against the step and the
+plan's acceptance criteria; a hint never writes the code for you; only "Apply the fix for me"
+lets it edit, and only for the current step. Uncommitted work is picked up where it left off.
+After the last step it asks you to stash anything unrelated, runs the plan's verification once,
+stages the changed paths by name (never `.zi/`), **commits on the current branch** (never
+pushes) and — for a plan under `.zi/` — writes the `commit` marker beside it, so
+`/zi:task .zi/<slug> manual execution` continues with the next phase.
 
 ### `/zi:overnight` — generate an overnight loop prompt
 
@@ -229,7 +253,7 @@ zi/                                   ← repo root = the "ncs-plugins" marketpl
 ├── .claude-plugin/marketplace.json    ← the catalog (lists the zi plugin)
 ├── plugins/zi/                       ← the plugin itself
 │   ├── .claude-plugin/plugin.json
-│   ├── commands/   prompt, plan, task, overnight, stage, commit, locate, todo, todo-compact
+│   ├── commands/   prompt, plan, task, mentor, overnight, stage, commit, locate, todo, todo-compact
 │   └── stages/     prompt, plan, verify, execute   ← shared stage text read by prompt, plan and task
 ├── README.md
 ├── CLAUDE.md
@@ -240,10 +264,11 @@ After install, commands are namespaced **`/zi:<command>`** (e.g. `/zi:prompt`).
 
 ## Caveats
 
-- **Plan, don't implement — except `/zi:task`.** `/zi:plan` stops at a verified, approved
-  `plan.md`; writing and committing the code is a separate step you drive yourself. `/zi:task`
-  is the deliberate exception: it implements the plan and commits on the current branch (never
-  pushes), so invoke it only when that is what you want.
+- **Plan, don't implement — except `/zi:task` and `/zi:mentor`.** `/zi:plan` stops at a
+  verified, approved `plan.md`; writing and committing the code is a separate step you drive
+  yourself. `/zi:task` is the deliberate exception: it implements the plan and commits on the
+  current branch (never pushes), so invoke it only when that is what you want. `/zi:mentor`
+  commits too, at the end of a loop you drive.
 - **Independence is the point.** `/zi:plan`'s verification runs in a fresh subagent with no
   view of the planning conversation — it reports findings, it never silently rewrites the plan.
 - **`stage`, `commit`, `locate`, `todo`, and `todo-compact`** are general-purpose helpers bundled
