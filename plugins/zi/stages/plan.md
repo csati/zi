@@ -50,16 +50,16 @@ The host hands you:
   a five-step scale — **levels**: `zero` (aliases `no`, `min`) = 0.0, `low` = 0.25,
   `medium` = 0.5, `high` = 0.75, `max` (alias `full`) = 1.0; the canonical name is the one
   written in bindings and artifacts (`Autonomy: max (1.0)`, never `full`). **Score**: for each
-  decision estimate `x1` = blast radius in 0..1 (1 = every source file affected, 0 = nothing in
-  the repo changes), `x2` = commitment in 0..1 (1 = practically irreversible, ≈0 = a short
-  prompt and minutes of trivial agentic work to change later), `x3` = confidence in 0..1 that
-  one answer is best; `score = 1 - (1 - x1) × (1 - x2) × x3`. Self-resolve only when
+  decision estimate `bl` = blast radius in 0..1 (1 = every source file affected, 0 = nothing in
+  the repo changes), `com` = commitment in 0..1 (1 = practically irreversible, ≈0 = a short
+  prompt and minutes of trivial agentic work to change later), `con` = confidence in 0..1 that
+  one answer is best; `score = 1 - (1 - bl) × (1 - com) × con`. Self-resolve only when
   `score ≤ setting`; otherwise raise it via ASK. Factors and score are written as decimals with
   at most two places. Never silently pick an interpretation: a decision resolved without either
   ASK or a recorded score is a failure. This stage has no exempt decision — the always-asked
   restatement lives in the prompt stage. Every decision you resolve yourself MUST be recorded
   in DRAFT (hence in `plan.md` after PERSIST) as
-  `Decided (auto): <choice> — <reason> (x1=<v> x2=<v> x3=<v> score=<v>)`.
+  `Decided (auto): <choice> — <reason> (bl=<v> com=<v> con=<v> score=<v>)`.
 - **Never write the PERSIST target early.** `.zi/{slug}/plan.md` comes into existence only
   through PERSIST, after the last finding is resolved — never during drafting or verification.
 - This stage plans and verifies; it never implements. Writing code is the host's decision,
@@ -79,8 +79,9 @@ Under AUDIT off nothing is written.
 
 Under AUDIT on, read the `audit.md` the AUDIT binding names (once, before the first record is
 appended) and follow its record form, create-if-missing and independence rules. This stage
-adds one plan-only optional line to that record form, placed immediately before the four score
-lines:
+adds one plan-only optional line to that record form, placed after `Description:` (or after
+`Resolved by:` when there is none), immediately before the record's `Question:` or `Score:`
+line:
 
 - `Supersedes: <title of the record this re-score replaces>` — optional; written when a
   record replaces an earlier one (a re-scored `Decided (auto):` challenge). The value is the
@@ -133,10 +134,10 @@ batch:
    Every finding is scored; a score ≤ setting resolves it without ASK, and step 4 records it
    in DRAFT in the `Decided (auto):` form.
    A finding that challenges an existing `Decided (auto):` line is **re-scored** like any
-   decision: re-estimate `x1` and `x2` yourself in light of the verifier's evidence (they may
-   differ from the verifier's corrected values) and cap `x3` at the previously recorded value;
+   decision: re-estimate `bl` and `com` yourself in light of the verifier's evidence (they may
+   differ from the verifier's corrected values) and cap `con` at the previously recorded value;
    `score ≤ setting` → keep the decision and rewrite its line in place with the new factors, the
-   marker going inside the parentheses — `(x1=… x2=… x3=… score=…; re-scored)`; otherwise
+   marker going inside the parentheses — `(bl=… com=… con=… score=…; re-scored)`; otherwise
    resolve it via ASK (recommended fix / alternative / Keep as-is) and record `Decided (user): …`.
 4. **Immediately apply the resolution** to DRAFT before raising the next finding — either make
    the fix, or leave it and record the deliberate decision in the plan as `Decided (user): …`
@@ -172,6 +173,9 @@ follows — is the host's business, not this stage's.
   a step reads, modifies or creates, each verified by you (a `create` path does not exist
   yet); the verifier and the executor start from it. Keep the ranges honest — they drive range
   reads downstream.
+- **Terse.** Never restate the prompt or its context. Steps are terse imperative bullets, each
+  naming the file and the change; no rationale prose beyond the `Decided (…)` lines; one line
+  per acceptance criterion. There is no numeric length cap.
 - **Decisions are recorded.** A "Keep as-is" or custom resolution is recorded as
   `Decided (user): …`, which a later verifier treats as settled; a self-resolved one in the
   `Decided (auto):` form, which a later verifier may challenge by recomputing the score.

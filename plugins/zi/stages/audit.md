@@ -12,16 +12,15 @@ own text.
     phase of a phased task (you know this from the `phase-NN/` segment of the artifact path
     you were given).
   - `Resolved by: auto | user`.
-  - `Description: <0–3 sentences>` — optional.
+  - `Description: <at most one sentence>` — optional.
   - `Question: <the question text and the options offered, the "(Recommended)" one marked>` and
     `Answer: <chosen label or free text>` — required on every `Resolved by: user` record.
-  - On every **scored** record (auto or user — for a user-resolved record these are the values
-    that forced the ASK) the four lines
-    `Blast radius: <v> — <0–2 sentences>`, `Commitment: <v> — <0–2 sentences>`,
-    `Confidence: <v> — <0–2 sentences>`, `Score: <v> — <0–2 sentences>`, where the values are
-    exactly the `x1`, `x2`, `x3` and `score` your stage text's Operating rules define
-    (decimals, at most two places). The one unscored decision — the prompt stage's
-    restatement/confirmation — carries no score lines.
+  - Every `Resolved by: auto` record ends with one line
+    `Score: bl=<v> com=<v> con=<v> score=<v> — <one short reason>`, where the values are
+    exactly the `bl`, `com`, `con` and `score` your stage text's Operating rules define
+    (decimals, at most two places). A `Resolved by: user` record carries `Question:` /
+    `Answer:` and **no** score line — the prompt stage's unscored restatement/confirmation
+    included.
 
 ## Create if missing
 

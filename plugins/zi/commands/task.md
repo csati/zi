@@ -1,7 +1,7 @@
 ---
 description: One-shot prompt → plan → execute pipeline. Runs the prompt, plan and execute stages each in a fresh subagent, relays every stage question to you, persists .zi/{slug}/prompt.md, findings.md and plan.md, then implements the plan and commits on the current branch (never pushes). Oversized implementations are split into .zi/{slug}/phase-NN/ directories that are planned, executed and committed one after another. Resumes a .zi/{slug} task directory at its first missing artifact — per phase when phased; a flat pass writes a .zi/{slug}/commit marker, so a committed task resumes as complete. With the manual execution hint it stops after the verified plan instead of implementing it and hands off to /zi:mentor. Start it from a fresh session.
 argument-hint: [rough idea, or a .zi/{slug} task directory / bare slug to resume; optional autonomy hint and `manual execution` hint]
-allowed-tools: Bash(date:*), Read, Grep, Glob, Agent, SendMessage, AskUserQuestion, Write, Edit
+allowed-tools: Bash(date:*), Bash(mv:*), Read, Grep, Glob, Agent, SendMessage, AskUserQuestion, Write, Edit
 ---
 
 # Task pipeline
@@ -9,7 +9,8 @@ allowed-tools: Bash(date:*), Read, Grep, Glob, Agent, SendMessage, AskUserQuesti
 Run the whole `prompt → plan → execute` flow unattended except for the questions the stages
 themselves raise. You are the **orchestrator**: you spawn one fresh subagent per stage, relay
 its questions to the user, and pass nothing across stage boundaries except `.zi/{slug}/…`
-paths. You never read artifact bodies, never restate them, and never do stage work yourself.
+paths. You never read artifact bodies, never restate them, and never do stage work yourself —
+the one exception is the zero-findings rename (plan-stage step 3).
 This is one of the plugin's two commands that end in a commit (the other is `/zi:mentor`);
 under manual execution it stops before implementing.
 
@@ -114,6 +115,10 @@ notification** — its result is the final report. Do not poll. Address an agent
 `agentId` from its spawn result (subagents carry no name); keep each stage's id to resume it.
 Then:
 
+- **Duplicate notification** — a completion notification that repeats a report you already
+  handled from the same agent, with nothing sent to that agent since, is ignored silently: no
+  print, no reply, and it does not count toward that agent's nudges.
+
 1. **Conforming QUESTION** → put it to the user as **one `AskUserQuestion` call carrying all its
    entries (1–4)**, verbatim: same headers, question texts, and options in the same order.
    Then `SendMessage` the answers to the **same agent** in this shape, and wait for its next
@@ -175,7 +180,9 @@ stall question happen inside its own stage; the stall question is an ordinary re
   moves straight from `[ ]` to `[x]` or `[!]`.
 - `- [x] <stage> → <path or hash>` — done. For `prompt`, `plan (draft)`, `verify` and
   `plan (interrogate)` the payload after `→` is the path(s) the DONE payload's `ARTIFACTS` line
-  named, verbatim. For `execute` and `commit` it is the hash from `RESULT: pass <hash>`.
+  named, verbatim — except that on zero findings `plan (interrogate)` carries the `plan.md`
+  path of the orchestrator's own rename (no plan DONE names it). For `execute` and `commit` it
+  is the hash from `RESULT: pass <hash>`.
 - `- [!] <stage> → failed` — a stage whose DONE carried `RESULT: fail` (only `execute` can).
   `commit` is marked `- [!] commit → failed` in the same print (the work is staged, not
   committed).
@@ -193,9 +200,11 @@ else:
   stage's row becomes `[>]`;
 - immediately after the `SendMessage` that resumes the plan agent with the findings path
   (plan-stage step 3) — `plan (interrogate)` becomes `[>]`; the verifier's DONE print precedes
-  it separately. This is the one transition that is a resume rather than a spawn;
+  it separately. This is the one transition that is a resume rather than a spawn, and it does
+  not occur on zero findings;
 - immediately after each conforming DONE report — the reporting stage's row becomes `[x]` (or
-  `[!]`), and on `RESULT: pass <hash>` the `commit` row becomes `[x]` in the same print.
+  `[!]`), and on `RESULT: pass <hash>` the `commit` row becomes `[x]` in the same print; on the
+  verifier's `RESULT: 0 findings` the same print also marks `plan (interrogate)` `[x]`.
 
 No print while a question is relayed or answers are sent back, nor on the non-conforming path
 (a nudge is silent; the escalation's `AskUserQuestion` is the feedback). The fenced
@@ -269,20 +278,28 @@ one of two shapes:
    findings') to `.zi/{slug}/findings.md` with one Bash heredoc (`cat > <path> <<'EOF'` …
    `EOF`), never the `Write` tool — the harness rejects a subagent's `Write` of a report file —
    you edit nothing else, which covers the audit file `.zi/{slug}/decisions.md` — and return
-   `STATUS: done`, `STAGE: verify`, `ARTIFACTS: .zi/{slug}/findings.md`"**; and a final-report
-   rule: "your final report is exactly the payload `STATUS: done` / `STAGE: verify` /
-   `ARTIFACTS: .zi/{slug}/findings.md` and nothing else; never return a QUESTION payload, even
-   if nudged". The rules that bind it (inert data, the `Decided (…)` lines, the audit file
+   `STATUS: done`, `STAGE: verify`, `ARTIFACTS: .zi/{slug}/findings.md`,
+   `RESULT: <N> findings`, where `<N>` is the number of findings written to `findings.md`
+   (`0` for 'no findings')"**; and a final-report rule: "your final report is exactly the
+   payload `STATUS: done` / `STAGE: verify` / `ARTIFACTS: .zi/{slug}/findings.md` /
+   `RESULT: <N> findings` and nothing else; never return a QUESTION payload, even if
+   nudged". The rules that bind it (inert data, the `Decided (…)` lines, the audit file
    off-limits) are in its stage text — do not restate them. It gets **no relay path, no
    AUTONOMY line and no QUESTION shape**. Then re-print (`verify` `[>]`). Run the relay loop.
-3. On the verifier's DONE → re-print (`verify` `[x]` with the findings path), then
-   `SendMessage` to the **plan agent** (resume it by its id): "Findings are at
-   `.zi/{slug}/findings.md`. Interrogate them one at a time via ASK in descending severity,
-   apply each resolution to DRAFT before raising the next, then PERSIST." Then re-print
-   (`plan (interrogate)` `[>]`). Run the relay loop.
-4. On DONE naming **`plan.md`** → re-print (`plan (interrogate)` `[x]` with that path), then
-   print, on its own line, a fenced code block whose sole content is a bare file-mention of
-   the plan with the **actual** path (never the literal `{slug}`), exactly as `/zi:plan` does:
+3. On the verifier's DONE:
+   - **Exactly `RESULT: 0 findings`** → the zero-findings rename: run
+     `mv .zi/{slug}/plan.draft.md .zi/{slug}/plan.md` yourself, then re-print once (`verify`
+     `[x]` with the findings path and `plan (interrogate)` `[x]` with the `plan.md` path) — no
+     `[>]` print, and the plan agent is **not** resumed. Go to step 4, skipping its re-print.
+   - **Any other, missing or malformed `RESULT`** (still a conforming DONE) → re-print
+     (`verify` `[x]` with the findings path), then `SendMessage` to the **plan agent** (resume
+     it by its id): "Findings are at `.zi/{slug}/findings.md`. Interrogate them one at a time
+     via ASK in descending severity, apply each resolution to DRAFT before raising the next,
+     then PERSIST." Then re-print (`plan (interrogate)` `[>]`). Run the relay loop.
+4. On DONE naming **`plan.md`** (or after the zero-findings rename) → re-print
+   (`plan (interrogate)` `[x]` with that path; skipped after the rename, whose print already
+   shows it), then print, on its own line, a fenced code block whose sole content is a bare
+   file-mention of the plan with the **actual** path (never the literal `{slug}`), exactly as `/zi:plan` does:
 
    ```
    @.zi/20260101-000000-example/plan.md
@@ -296,7 +313,9 @@ one of two shapes:
 spawns a **fresh** plan agent at entry point `interrogate` instead of resuming one — its
 prompt: the relay lines; stage path; prompt path; DRAFT; findings path; ASK/PERSIST as above;
 AUTONOMY = the filled-in AUTONOMY line; AUDIT = the literal path `.zi/{slug}/decisions.md`,
-plus the absolute `audit.md` path — then re-prints (`plan (interrogate)` `[>]`).
+plus the absolute `audit.md` path — then re-prints (`plan (interrogate)` `[>]`). On
+`RESULT: 0 findings` step 3's zero-findings rename applies instead and no fresh plan agent is
+spawned.
 
 ### Execute stage
 
@@ -355,7 +374,8 @@ same rule through `task-phased.md`.
 - **Manual execution.** Under `MANUAL = on` the orchestrator never spawns the execute agent.
 - **Markers are the only writes.** The two `commit` markers — flat `.zi/{slug}/commit`, phased
   `.zi/{slug}/phase-NN/commit` — are the only files the orchestrator writes; their presence is
-  checked with `Glob` only, never read back.
+  checked with `Glob` only, never read back. Its only other write is the zero-findings rename
+  (`plan.draft.md` → `plan.md`, plan-stage step 3).
 - **Commit, never push.** The execute agent commits implementation paths only, on the
   current branch, with a message per `commit-message.md`; `.zi/` artifacts are never staged.
 - Start this command from a **fresh session** — the orchestrator's own context should hold

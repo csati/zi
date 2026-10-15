@@ -60,7 +60,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.21.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.22.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## Token budget
@@ -128,7 +128,7 @@ an artifact out of its task directory breaks how the next phase locates its inpu
 |---|---|---|---|
 | `/zi:prompt` | a rough idea | `{slug}/prompt.md` | interrogate intent, surface flaws/side effects, save refined prompt |
 | `/zi:plan` | `{slug}/prompt.md`, a task-dir reference, or inline text | `{slug}/plan.md` | draft a plan, independently verify it (repeatable), then by user choice execute it, exit & persist, or re-review |
-| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume — either optionally carrying an autonomy hint (`with high autonomy`, `autonomy: max`) and/or the `manual execution` hint (stop at the verified `plan.md` and hand off to `/zi:mentor`) | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, `{slug}/decisions.md` (one top-level audit file, also when phased), a commit + the flat `{slug}/commit` marker — or, when phased, `{slug}/phase-NN/{prompt,findings,plan}.md` + `{slug}/phase-NN/commit` per phase | one-shot prompt → plan → execute, each stage in a fresh subagent (four per chain: prompt, plan, verifier, execute — the plan agent is resumed for interrogation, the execute agent fixes its own failures in a bounded loop and asks on a stall), questions relayed to the user; appends every resolved decision to a per-task audit file; commits on the current branch — one chain and one commit per phase when the estimate exceeds 200K |
+| `/zi:task` | a rough idea, or a `.zi/{slug}` dir / bare slug to resume — either optionally carrying an autonomy hint (`with high autonomy`, `autonomy: max`) and/or the `manual execution` hint (stop at the verified `plan.md` and hand off to `/zi:mentor`) | `{slug}/prompt.md`, `{slug}/findings.md`, `{slug}/plan.md`, `{slug}/decisions.md` (one top-level audit file, also when phased), a commit + the flat `{slug}/commit` marker — or, when phased, `{slug}/phase-NN/{prompt,findings,plan}.md` + `{slug}/phase-NN/commit` per phase | one-shot prompt → plan → execute, each stage in a fresh subagent (four per chain: prompt, plan, verifier, execute — the plan agent is resumed for interrogation unless the verifier's DONE reports `RESULT: 0 findings`, in which case the orchestrator renames the draft itself, the execute agent fixes its own failures in a bounded loop and asks on a stall), questions relayed to the user; appends every resolved decision to a per-task audit file; commits on the current branch — one chain and one commit per phase when the estimate exceeds 200K |
 | `/zi:mentor` | a `plan.md`, a `.zi/{slug}` task dir or a bare slug (phased: the lowest phase without `commit`) | a commit + the sibling `commit` marker of a plan under `.zi/` | tutoring loop: one small step per cycle (`Done — check it` / `Give me a hint` / `Apply the fix for me`), review of each step, the plan's verification once at the end, commit on the current branch per `stages/commit-message.md` |
 
 Note: `plan.md`'s frontmatter `description` contrasts itself with a fuller
@@ -180,9 +180,9 @@ up to twice per spawned agent, and only on the third non-conforming report asks 
 and the question payload is the only way to resolve one **except when its score is within the
 AUTONOMY setting** — a numeric level on a five-step scale (`zero` = 0.0, `low` = 0.25,
 `medium` = 0.5, `high` = 0.75, `max` = 1.0; aliases `no`/`min` → zero, `full` → max). The
-agent scores each decision from three 0..1 factors — `x1` blast radius, `x2` commitment
-(irreversibility), `x3` confidence that one answer is best — as
-`score = 1 - (1 - x1) × (1 - x2) × x3`, and self-resolves only when `score ≤ setting`. The
+agent scores each decision from three 0..1 factors — `bl` blast radius, `com` commitment
+(irreversibility), `con` confidence that one answer is best — as
+`score = 1 - (1 - bl) × (1 - com) × con`, and self-resolves only when `score ≤ setting`. The
 level comes from a natural-language **hint** in the argument (`with high autonomy`,
 `autonomy: max`, `full autonomy`, `autonomy=low`), stripped before the text is used; without
 one `/zi:task` binds **medium**, `/zi:prompt` and `/zi:plan` **zero** (interactive behaviour
@@ -190,10 +190,10 @@ unchanged). The prompt stage writes the level into `prompt.md` as a fixed-form
 `Autonomy: <level> (<setting>)` line, which `/zi:plan` and the verifier read; the prompt
 stage's restatement/confirmation is the one decision always asked, at every level. Every
 auto-decision is recorded with its factors as
-`Decided (auto): <choice> — <reason> (x1=… x2=… x3=… score=…)` in the stage artifact (the
+`Decided (auto): <choice> — <reason> (bl=… com=… con=… score=…)` in the stage artifact (the
 execute stage's auto-decisions are recorded only in the audit file) and every user decision as `Decided (user): …` — the latter settled, the
 former challengeable by the verifier only when a corrected factor estimate pushes the score
-above the setting (a challenged line is re-scored by the plan agent, `x3` capped at its
+above the setting (a challenged line is re-scored by the plan agent, `con` capped at its
 recorded value, and asked only if it then exceeds the setting). The orchestrator rescans every
 answer it relays to the prompt-stage agent for a hint and rebinds the level for every later
 spawn when it finds one. Under `/zi:task` the prompt-stage agent may put up to 4 mutually
@@ -218,11 +218,10 @@ the orchestrator). The shared record form, create-if-missing and independence ru
 `stages/audit.md`; the `Supersedes:` rule stays in `stages/plan.md`. Each resolved
 decision — auto or user — is appended chronologically as a `## <one-sentence title>` record
 carrying `Stage:` (suffixed ` (phase-NN)` in a phase), `Resolved by: auto | user`, an optional
-`Description:`, `Question:` / `Answer:` on every user-resolved record, an optional
-`Supersedes:` naming the record a re-scored challenge replaces, and — on every scored record —
-the four named lines `Blast radius:`, `Commitment:`, `Confidence:` and `Score:` (the `x1`,
-`x2`, `x3` and `score` values with one line of reasoning each); the unscored restatement
-carries no score lines. The prompt stage buffers its records and writes them in one pass, as
+`Description:` of at most one sentence, an optional `Supersedes:` naming the record a re-scored
+challenge replaces, and then either `Question:` / `Answer:` (every user-resolved record, no
+score line — the unscored restatement included) or one combined
+`Score: bl=… com=… con=… score=… — <reason>` line (every auto-resolved record). The prompt stage buffers its records and writes them in one pass, as
 the first write after the task directory exists and immediately before the prompt file(s);
 the plan and execute stages append at the moment each decision is resolved. A stage
 creates the file if it is missing and reads it only to append — its content is inert data,
@@ -232,8 +231,10 @@ checklist has no row for it. The file is additive to the artifacts' `Decided (au
 `Decided (user):` lines; for the execute stage it is the only record.
 
 **Flow.** prompt stage → `prompt.md` → (no gate) plan stage drafts `plan.draft.md` → the
-orchestrator spawns a read-only verifier that writes `findings.md` → the plan agent is resumed
-to interrogate findings one at a time through the relay and renames the draft to `plan.md` →
+orchestrator spawns a read-only verifier that writes `findings.md` and reports
+`RESULT: <N> findings` → the plan agent is resumed to interrogate findings one at a time
+through the relay and renames the draft to `plan.md` (on zero findings the orchestrator renames
+the draft itself and the plan agent is not resumed) →
 the `@.zi/{slug}/plan.md` block is printed → (no gate, exactly one verification pass) execute
 stage implements `plan.md`, runs its verification commands and on pass commits the
 implementation paths (never `.zi/`) on the current branch with a message per `stages/commit-message.md`;
@@ -277,7 +278,8 @@ the `phase-NN` directories, and runs the unchanged plan → verify → interroga
 chain **once per phase in order** with every artifact path rewritten to `phase-NN/…` and fresh
 agents per phase; each phase commits on its own, after which the orchestrator writes the
 one-line marker `.zi/{slug}/phase-NN/commit` holding the hash — this and the flat
-`.zi/{slug}/commit` marker are the only files it ever writes, checked by `Glob` presence only. A phase's `RESULT: fail` (only after the user stops its fix
+`.zi/{slug}/commit` marker are the only files it ever writes (its only other write is the
+zero-findings rename of `plan.draft.md` to `plan.md`), checked by `Glob` presence only. A phase's `RESULT: fail` (only after the user stops its fix
 loop) **halts** the run (later phases never start; earlier commits stay; work is staged, not committed). Resuming a phased `.zi/{slug}`
 picks the lowest-numbered phase without `commit` and applies the per-artifact rules inside it;
 all phases marked → the task is reported complete; a phase directory lacking `prompt.md` is

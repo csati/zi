@@ -46,16 +46,15 @@ messages to your own questions.
   a five-step scale — **levels**: `zero` (aliases `no`, `min`) = 0.0, `low` = 0.25,
   `medium` = 0.5, `high` = 0.75, `max` (alias `full`) = 1.0; the canonical name is the one
   written in bindings and artifacts (`Autonomy: max (1.0)`, never `full`). **Score**: for each
-  decision estimate `x1` = blast radius in 0..1 (1 = every source file affected, 0 = nothing in
-  the repo changes), `x2` = commitment in 0..1 (1 = practically irreversible, ≈0 = a short
-  prompt and minutes of trivial agentic work to change later), `x3` = confidence in 0..1 that
-  one answer is best; `score = 1 - (1 - x1) × (1 - x2) × x3`. Self-resolve only when
+  decision estimate `bl` = blast radius in 0..1 (1 = every source file affected, 0 = nothing in
+  the repo changes), `com` = commitment in 0..1 (1 = practically irreversible, ≈0 = a short
+  prompt and minutes of trivial agentic work to change later), `con` = confidence in 0..1 that
+  one answer is best; `score = 1 - (1 - bl) × (1 - com) × con`. Self-resolve only when
   `score ≤ setting`; otherwise raise it via ASK. Factors and score are written as decimals with
   at most two places. Never silently pick an interpretation: a decision resolved without either
   ASK or a recorded score is a failure. Every decision you resolve yourself MUST be recorded —
   for this stage the record is the audit-file record (AUDIT on, the `audit.md` form), whose
-  `Blast radius:` / `Commitment:` / `Confidence:` / `Score:` lines carry the `x1`/`x2`/`x3`/score
-  values — not `plan.md` and not the commit. This stage writes no `Decided (auto):` line
+  `Score:` line carries the `bl`/`com`/`con`/score values — not `plan.md` and not the commit. This stage writes no `Decided (auto):` line
   anywhere. **Under AUDIT off this stage never self-resolves — every open decision goes to
   ASK.** Do not ask what the plan or the code already answers.
 - **Git rules** (the plugin's commit conventions; the message rules live in the COMMIT file):

@@ -81,7 +81,8 @@ checklist tracks no such artifact.
    and is skipped exactly like an executed one).
 2. **Commit marker**: on a phase's `RESULT: pass <hash>` write the one-line file `P/commit`
    containing the hash (this marker and the flat `.zi/{slug}/commit` marker of task.md's Execute
-   stage are the only files the orchestrator ever writes, and it never reads either back —
+   stage are the only files the orchestrator ever writes, apart from the zero-findings rename
+   `P/plan.draft.md` → `P/plan.md`, and it never reads either back —
    resume checks their presence with `Glob` only) **before** the pass-DONE
    re-print — that print already shows the phase collapsed to `- [x] phase-NN → <hash>`; the
    marker write gets no print of its own. Then start the next phase.

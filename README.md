@@ -112,9 +112,10 @@ stage's restatement of your idea is always asked, at every level.
 
 **Every decision is on the record.** Each task run keeps one `.zi/{slug}/decisions.md` (a
 single top-level file, also for phased runs), appended to by the prompt, plan and execute
-agents: one titled record per resolved decision, saying who resolved it, the question and your
-answer when it was you, and the blast-radius, commitment, confidence and score values with a
-line of reasoning each — so the run's decision history can be read afterwards. The verifier
+agents: one titled record per resolved decision, saying who resolved it — the question and your
+answer for your decisions, and for self-made ones one line with the blast-radius (`bl`),
+commitment (`com`) and confidence (`con`) factors, the score and a short reason — so the run's
+decision history can be read afterwards. The verifier
 never touches it, and the interactive commands (`/zi:prompt`, `/zi:plan`) write none.
 
 **Big jobs are split into phases.** While it grounds the idea, the prompt stage estimates how

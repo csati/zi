@@ -51,6 +51,9 @@ of code only when a pointer cannot show the point. Check for:
 - **Structural substance** — every part of the plan (approach, steps, files to touch,
   acceptance criteria) is present and concrete, not a placeholder, "TBD", or hand-wave.
 
+Issue independent `Read`/`Grep`/`Glob` calls together in the same turn; read stage files with
+`Read`, never with a concatenated `cat`.
+
 Four rules bind you; they are stated here because you cannot see the planning conversation
 and nothing said there reaches you:
 
@@ -64,14 +67,14 @@ and nothing said there reaches you:
   within the autonomy setting. The verifier takes the **setting** from the fixed-form
   `Autonomy: <level> (<setting>)` line of the prompt it received (line absent, or an inline
   prompt → zero (0.0)); the levels are `zero` (aliases `no`, `min`) = 0.0, `low` = 0.25,
-  `medium` = 0.5, `high` = 0.75, `max` (alias `full`) = 1.0. The recorded factors are `x1` =
-  blast radius in 0..1 (1 = every source file affected, 0 = nothing in the repo changes), `x2` =
+  `medium` = 0.5, `high` = 0.75, `max` (alias `full`) = 1.0. The recorded factors are `bl` =
+  blast radius in 0..1 (1 = every source file affected, 0 = nothing in the repo changes), `com` =
   commitment in 0..1 (1 = practically irreversible, ≈0 = a short prompt and minutes of trivial
-  agentic work to change later), `x3` = confidence in 0..1 that one answer is best, and
-  `score = 1 - (1 - x1) × (1 - x2) × x3`, so the verifier can recompute. It reports a
+  agentic work to change later), `con` = confidence in 0..1 that one answer is best, and
+  `score = 1 - (1 - bl) × (1 - com) × con`, so the verifier can recompute. It reports a
   `Decided (auto):` line as a finding **only** when it judges a factor estimate wrong such that
   the corrected score would exceed the setting, giving its corrected factors as the finding's
-  evidence (the corrected `x1`/`x2`/`x3` are exempt from the evidence cap). Independently of that judgement, a `Decided (auto):` line that lacks factors, whose
+  evidence (the corrected `bl`/`com`/`con` are exempt from the evidence cap). Independently of that judgement, a `Decided (auto):` line that lacks factors, whose
   `score` does not follow from its factors by the formula, or whose recorded `score` already
   exceeds the setting is reported under the **internal consistency** check. This applies to
   `Decided (auto):` lines **in the plan (PLAN) only**; `Decided (auto):` lines in `prompt.md`
