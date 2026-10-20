@@ -44,6 +44,7 @@ user has explicit feedback on exactly what is being refined.
 | AUTONOMY | `<level> (<setting>), from hint` when a hint was detected in the argument text, else **`zero (0.0), default`** — an unhinted run asks every question as today. |
 | PHASING | **off** — always a single `prompt.md`; no estimate is computed or recorded and no phasing rule file is read, interactive behaviour is unchanged. |
 | AUDIT | **unbound** — the stage default applies (off, nothing read or written — no audit rule file is read); interactive runs keep no audit file. |
+| RESTATEMENT | **unbound** — the stage default applies (`ask`): the Phase-1 restatement is a confirmation asked at every level, interactive behaviour unchanged. |
 | TIMESTAMP | the value below, captured when the command was invoked (only if it is missing, run `date +%Y%m%d-%H%M%S` yourself): |
 
 !`date +%Y%m%d-%H%M%S`

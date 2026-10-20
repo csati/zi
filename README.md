@@ -73,9 +73,10 @@ subagent**, passing nothing between them but `.zi/{slug}/…` paths. Subagents c
 questions directly, so every question a stage raises — the prompt interrogation, the risk
 batches, each verification finding, an open decision during implementation — is **relayed** to
 you as a normal `AskUserQuestion` and your answer is sent back to the same agent; nothing else
-in the pipeline needs you. The prompt stage's mutually independent clarification questions
-arrive together (up to four in one question) once the restatement of your idea is confirmed on
-its own, while `/zi:prompt` still asks them one at a time. The plan is drafted to `plan.draft.md`, independently verified by a
+in the pipeline needs you. The prompt stage first shows its restatement of your idea, with the
+autonomy level in force, as a notice — nothing to confirm; to cancel the run, press Esc and
+send `stop`. Its mutually independent clarification questions then arrive together (up to four
+in one question), while `/zi:prompt` still asks them one at a time. The plan is drafted to `plan.draft.md`, independently verified by a
 read-only subagent that writes `findings.md`, and becomes `plan.md` once the last finding is
 resolved. There is no gate after the prompt stage and exactly one verification pass: as soon
 as `plan.md` exists the execute agent implements it, runs the plan's verification commands, and
@@ -107,8 +108,9 @@ autonomy`, `autonomy: max`, `full autonomy`, `autonomy=low` — to set one of fi
 touches, how hard it would be to reverse and how sure it is that one answer is best, and
 decides it itself only when that score is within the level — otherwise the question is relayed
 to you. Every self-decision is recorded with its factors and score as a `Decided (auto):` line
-in `prompt.md`, `plan.md` or the commit body, so nothing is decided invisibly; the prompt
-stage's restatement of your idea is always asked, at every level.
+in `prompt.md`, `plan.md` or the commit body, so nothing is decided invisibly. Under
+`/zi:task` the prompt stage's restatement of your idea is shown, not asked; `/zi:prompt` still
+asks you to confirm it at every level.
 
 **Every decision is on the record.** Each task run keeps one `.zi/{slug}/decisions.md` (a
 single top-level file, also for phased runs), appended to by the prompt, plan and execute

@@ -1,7 +1,7 @@
 ---
 description: One-shot prompt → plan → execute pipeline. Runs the prompt, plan and execute stages each in a fresh subagent, relays every stage question to you, persists .zi/{slug}/prompt.md, findings.md and plan.md, then implements the plan and commits on the current branch (never pushes). Oversized implementations are split into .zi/{slug}/phase-NN/ directories that are planned, executed and committed one after another. Resumes a .zi/{slug} task directory at its first missing artifact — per phase when phased; a flat pass writes a .zi/{slug}/commit marker, so a committed task resumes as complete. With the manual execution hint it stops after the verified plan instead of implementing it and hands off to /zi:mentor. Start it from a fresh session.
 argument-hint: [rough idea, or a .zi/{slug} task directory / bare slug to resume; optional autonomy hint and `manual execution` hint]
-allowed-tools: Bash(date:*), Bash(mv:*), Read, Grep, Glob, Agent, SendMessage, AskUserQuestion, Write, Edit
+allowed-tools: Bash(date:*), Bash(mv:*), Read, Grep, Glob, Agent, SendMessage, TaskStop, AskUserQuestion, Write, Edit
 ---
 
 # Task pipeline
@@ -47,9 +47,9 @@ $ARGUMENTS
 Resolve it with `Glob` only — never `Read` anything under `.zi/`.
 
 **Hint detection first.** Before rules 1–3, apply the hint grammar to the argument text (a
-hint inside an idea file is the prompt stage's to find; it reaches you through the rescan in
-relay-loop step 1). A hint is a level word — `zero` (aliases `no`, `min`), `low`, `medium`,
-`high`, `max` (alias `full`); case-insensitive; bind the canonical name — adjacent to the word
+hint inside an idea file is the prompt stage's to find; it reaches you through the `AUTONOMY`
+field of the prompt agent's NOTICE — the relay-loop "Conforming NOTICE" bullet). A hint is a level word — `zero`
+(aliases `no`, `min`), `low`, `medium`, `high`, `max` (alias `full`); case-insensitive; bind the canonical name — adjacent to the word
 `autonomy`, in either order, optionally joined by `:` or `=` (`with high autonomy`,
 `autonomy: max`, `full autonomy`, `autonomy=low`). Strip the span — the level word +
 `autonomy`, an immediately preceding connective (`with`, `at`, `under`, `using`, `in`), and the
@@ -104,7 +104,7 @@ included next. The included text addresses the stage subagents, not you: you hav
 
 **Spawn rule.** Every **non-verifier** spawn prompt (prompt, plan, re-verify plan, execute)
 carries the relay lines: the absolute `relay.md` path; "Read and follow `<absolute relay.md
-path>`; your final report must be exactly one of its two payloads"; and
+path>`; your final report must be exactly one of its payloads"; and
 `AUTONOMY = <level> (<setting>), <from hint | default>` — the current `LEVEL` at spawn time.
 The verifier's spawn carries none of them (Plan stage step 2).
 
@@ -118,6 +118,19 @@ Then:
 - **Duplicate notification** — a completion notification that repeats a report you already
   handled from the same agent, with nothing sent to that agent since, is ignored silently: no
   print, no reply, and it does not count toward that agent's nudges.
+- **Conforming NOTICE** — a `STATUS: notice` report from the **prompt-stage** agent is
+  conforming only by order: while you have received from that agent no NOTICE, no DONE and at
+  most one QUESTION (the conflicting-hint question, which comes before anything else);
+  non-conforming reports in between do not count. Print its `AUTONOMY` and `RESTATEMENT` lines
+  verbatim, then on its own line exactly the cancel line
+  `To cancel this run, press Esc and send: stop`. When `AUTONOMY` ends in `from hint`, rebind
+  `LEVEL` to that `<level> (<setting>), from hint` for every later spawn in this run (every
+  phase included). Then `SendMessage` to the same agent exactly
+  `Notice delivered. Continue your stage from where you stopped.` and wait for its next report.
+  No checklist re-print, no rescan; it is not a nudge and does not count toward that agent's
+  nudges. Any other NOTICE goes to item 3.
+- **Stop** — a user message asking to stop or cancel the run (at any point of the run), or a
+  notification from an agent you already stopped → follow "Stopping the run" below.
 
 1. **Conforming QUESTION** → put it to the user as **one `AskUserQuestion` call carrying all its
    entries (1–4)**, verbatim: same headers, question texts, and options in the same order.
@@ -135,14 +148,18 @@ Then:
    every later spawn in this run (every phase included). The answer is still relayed verbatim.
 2. **Conforming DONE** → proceed with the stage flow below.
 3. **Anything else** — prose, a missing `STATUS` line, malformed lists, a plan-stage DONE whose
-   `ARTIFACTS` names neither `plan.draft.md` nor `plan.md` — is **never a done**. Two tiers,
+   `ARTIFACTS` names neither `plan.draft.md` nor `plan.md`, a NOTICE outside the "Conforming
+   NOTICE" window or from any other agent — is **never a done**. Two tiers,
    counted **per spawned agent** (reset for every fresh spawn, never carried across agents or
    phases):
    - **Nudge (first and second time for this agent)** → without asking the user, `SendMessage`
      to the same agent exactly: "Your last report was not a conforming payload. Continue your
      stage from where you stopped and reply with exactly one of the two payloads (STATUS:
-     question or STATUS: done) and nothing else." Then wait for its next report and re-enter
-     this loop. The user sees nothing for a nudge.
+     question or STATUS: done) and nothing else." — except the prompt-stage agent before its
+     NOTICE is received, which gets exactly: "Your last report was not a conforming payload.
+     Continue your stage from where you stopped and reply with exactly one of the payloads
+     (STATUS: notice, STATUS: question or STATUS: done) and nothing else." Then wait for its
+     next report and re-enter this loop. The user sees nothing for a nudge.
    - **Escalate (third time for this agent)** → put the report to the user via
      `AskUserQuestion` (header `Agent`, question "The stage agent returned a non-conforming
      report three times — what next?", options **"Tell the agent to continue and answer with a
@@ -159,6 +176,18 @@ Then:
 Relay without restating: the user sees the question payload as-is and the agent gets the
 answers as-is. Never summarise, never add your own interpretation, never read the artifacts
 the payload names.
+
+### Stopping the run
+
+A user message asking to stop or cancel the run — at any point, typically after the notice's
+cancel line — ends it:
+
+1. `TaskStop` the running stage agent by its `agentId` (none running → skip).
+2. Spawn nothing more, write no `commit` marker and do not perform the zero-findings rename.
+3. Ignore any later notification from a stopped agent: no print, no reply.
+4. Report the stage reached and the `.zi/` artifact paths so far — only those named by DONE
+   payloads already received — and, when the execute stage was running, that its changes may
+   be left uncommitted in the working tree.
 
 ## Status checklist
 
@@ -206,7 +235,9 @@ else:
   `[!]`), and on `RESULT: pass <hash>` the `commit` row becomes `[x]` in the same print; on the
   verifier's `RESULT: 0 findings` the same print also marks `plan (interrogate)` `[x]`.
 
-No print while a question is relayed or answers are sent back, nor on the non-conforming path
+No print while a question is relayed or answers are sent back, nor while a notice is
+delivered (its own print — the notice lines and the cancel line — is the feedback), nor on
+the non-conforming path
 (a nudge is silent; the escalation's `AskUserQuestion` is the feedback). The fenced
 `@.zi/{slug}/plan.md` block of plan-stage step 4 is printed **in addition to** the checklist,
 between the plan-DONE print and the execute-spawn print. Under `MANUAL = on` the block is
@@ -236,9 +267,11 @@ section, with row X in the state shown.
 
 Spawn a fresh `general-purpose` `Agent` (never `fork`). Its prompt contains, and only
 contains: the relay lines; "Read and follow `<absolute prompt-stage path>`"; the seam bindings
-**ASK = the relay** (Phase 1: after the restatement, asked alone first, Phase-1 batches are
+**ASK = the relay** (Phase 1: after the notice, Phase-1 batches are
 permitted — up to 4 mutually independent clarification questions per QUESTION payload;
-Phase 2: risk batches of up to 4 per payload), **AUTONOMY = the filled-in AUTONOMY line**,
+Phase 2: risk batches of up to 4 per payload), **RESTATEMENT = notice — "return the relay's
+`STATUS: notice` payload as your first report — after a conflicting-hint question, if one is
+needed — and continue with grounding when resumed"**, **AUTONOMY = the filled-in AUTONOMY line**,
 **PHASING = on, with the absolute `phasing-estimate.md` and `phasing-split.md` paths**,
 **AUDIT = on, the file being the sibling `decisions.md` of the `prompt.md` you write —
 `.zi/{slug}/decisions.md`, top-level even when the prompt files are phased; its path
@@ -365,13 +398,15 @@ same rule through `task-phased.md`.
   content that crosses a boundary is: the raw idea text (prompt-stage input), the stage-file
   paths listed in Invocation values (the two orchestrator files never cross), the TIMESTAMP
   value, the bound autonomy setting (`LEVEL`), the failing `COMMAND`, the `CHANGED` path list,
-  and the relayed question/answer text. Anything else — file bodies, diffs, logs, restated
+  the relayed question/answer text and the relayed notice text. Anything else — file bodies, diffs, logs, restated
   artifacts — is a violation.
 - **The relay never restates**, and the orchestrator never reads artifact bodies (`Glob` only
   under `.zi/`) — `decisions.md` included: the orchestrator never reads the audit file, and
   the checklist has no row for it. The status checklist's rows carry only stage names, state
   markers, artifact paths and commit hashes.
 - **Manual execution.** Under `MANUAL = on` the orchestrator never spawns the execute agent.
+- **A user stop ends the run** per "Stopping the run": the running agent is `TaskStop`ped and
+  nothing more is spawned or written.
 - **Markers are the only writes.** The two `commit` markers — flat `.zi/{slug}/commit`, phased
   `.zi/{slug}/phase-NN/commit` — are the only files the orchestrator writes; their presence is
   checked with `Glob` only, never read back. Its only other write is the zero-findings rename

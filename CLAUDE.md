@@ -60,7 +60,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.22.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.23.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## Token budget
@@ -173,10 +173,18 @@ stops and returns a structured `STATUS: question` payload (1–4 questions, each
 question text and options, the "(Recommended)" one first); the orchestrator puts it to the user
 verbatim in one `AskUserQuestion`, `SendMessage`s the answers back to the same agent (addressed
 by the `agentId` from the spawn result — subagents carry no name), and loops until a
-conforming `STATUS: done` payload arrives. Any other report is never a done: the orchestrator
-silently nudges the same agent (a fixed "reply with exactly one of the two payloads" message)
-up to twice per spawned agent, and only on the third non-conforming report asks the user
-(continue / stop). Both ends are hardened: every stage prompt says a guessed decision is a failure
+conforming `STATUS: done` payload arrives. The prompt-stage agent's first report (a
+conflicting-hint question may precede it) is a third payload, `STATUS: notice`, carrying an
+`AUTONOMY:` line and its `RESTATEMENT:` of the idea: the orchestrator prints both lines
+verbatim plus the fixed cancel line `To cancel this run, press Esc and send: stop`, rebinds
+the level from the `AUTONOMY:` field when it says `from hint` (how a hint inside an idea file
+reaches later spawns), and resumes the agent with the fixed continue line `Notice delivered.
+Continue your stage from where you stopped.` — nothing for the user to answer. A user `stop`
+at any point ends the run: the orchestrator `TaskStop`s the running agent, spawns and writes
+nothing more, and reports the stage reached and the artifact paths so far. Any other report is
+never a done: the orchestrator silently nudges the same agent (a fixed "reply with exactly one
+of the payloads" message) up to twice per spawned agent, and only on the third
+non-conforming report asks the user (continue / stop). Both ends are hardened: every stage prompt says a guessed decision is a failure
 and the question payload is the only way to resolve one **except when its score is within the
 AUTONOMY setting** — a numeric level on a five-step scale (`zero` = 0.0, `low` = 0.25,
 `medium` = 0.5, `high` = 0.75, `max` = 1.0; aliases `no`/`min` → zero, `full` → max). The
@@ -188,7 +196,8 @@ level comes from a natural-language **hint** in the argument (`with high autonom
 one `/zi:task` binds **medium**, `/zi:prompt` and `/zi:plan` **zero** (interactive behaviour
 unchanged). The prompt stage writes the level into `prompt.md` as a fixed-form
 `Autonomy: <level> (<setting>)` line, which `/zi:plan` and the verifier read; the prompt
-stage's restatement/confirmation is the one decision always asked, at every level. Every
+stage's restatement is the one unscored item — under `/zi:prompt` (RESTATEMENT = `ask`) a
+confirmation asked at every level, under `/zi:task` a non-blocking notice. Every
 auto-decision is recorded with its factors as
 `Decided (auto): <choice> — <reason> (bl=… com=… con=… score=…)` in the stage artifact (the
 execute stage's auto-decisions are recorded only in the audit file) and every user decision as `Decided (user): …` — the latter settled, the
@@ -197,7 +206,7 @@ above the setting (a challenged line is re-scored by the plan agent, `con` cappe
 recorded value, and asked only if it then exceeds the setting). The orchestrator rescans every
 answer it relays to the prompt-stage agent for a hint and rebinds the level for every later
 spawn when it finds one. Under `/zi:task` the prompt-stage agent may put up to 4 mutually
-independent Phase-1 clarifications in one payload (the restatement always alone, first),
+independent Phase-1 clarifications in one payload (after the restatement notice),
 while `/zi:prompt` keeps one question per call.
 
 **The checklist.** The orchestrator re-prints a fixed-form Markdown checklist (one row per
@@ -220,7 +229,8 @@ decision — auto or user — is appended chronologically as a `## <one-sentence
 carrying `Stage:` (suffixed ` (phase-NN)` in a phase), `Resolved by: auto | user`, an optional
 `Description:` of at most one sentence, an optional `Supersedes:` naming the record a re-scored
 challenge replaces, and then either `Question:` / `Answer:` (every user-resolved record, no
-score line — the unscored restatement included) or one combined
+score line — the unscored restatement included under RESTATEMENT = `ask`; a notice gets no
+record) or one combined
 `Score: bl=… com=… con=… score=… — <reason>` line (every auto-resolved record). The prompt stage buffers its records and writes them in one pass, as
 the first write after the task directory exists and immediately before the prompt file(s);
 the plan and execute stages append at the moment each decision is resolved. A stage
@@ -303,24 +313,28 @@ the report text), for the execute stage **COMMIT** (the commit-message rules fil
 plus **AUTONOMY** in every stage (the numeric setting the per-decision score is compared
 against; a seam with a default — unbound = zero, always ASK — so an older host keeps the
 always-ask behaviour), for the prompt stage only, **PHASING** (whether an oversized
-implementation is split into phase prompts; another defaulted seam — unbound = off), and
+implementation is split into phase prompts; another defaulted seam — unbound = off),
 **AUDIT** in every stage (whether resolved decisions are appended to the per-task
 `decisions.md`; the third defaulted seam — unbound = off, nothing written — bound on only by
-the orchestrator and listed unbound by both wrappers). The
+the orchestrator and listed unbound by both wrappers), and, for the prompt stage only,
+**RESTATEMENT** (whether the Phase-1 restatement is a confirmation question or a non-blocking
+notice; the fourth defaulted seam — unbound = `ask` — listed unbound by `/zi:prompt` and bound
+`notice` by the orchestrator). The
 `/zi:prompt` / `/zi:plan` wrappers bind ASK = `AskUserQuestion`,
 DRAFT = the harness plan file, VERIFY = the wrapper launches the `Agent` verifier on
 `${CLAUDE_PLUGIN_ROOT}/stages/verify.md` with PLAN = the harness plan file, PROMPT = the
 resolved prompt, FINDINGS unbound, PERSIST =
 the Phase 4 three-way choice + bootstrap line + `ExitPlanMode`, AUTONOMY = the hint or zero
 (`/zi:prompt`) / the prompt file's `Autonomy:` line or zero (`/zi:plan`), PHASING = off,
-AUDIT = unbound;
+AUDIT = unbound, RESTATEMENT = unbound (`/zi:prompt`);
 the orchestrator binds ASK = the relay, DRAFT = `.zi/{slug}/plan.draft.md`, VERIFY = an
 orchestrator-spawned verifier on `stages/verify.md` with PLAN = `plan.draft.md`, PROMPT =
 `prompt.md`, FINDINGS = write `findings.md` via a Bash heredoc (Claude Code rejects a
 subagent's `Write` of a report file — "Subagents should return findings as text"), PERSIST = rename to `plan.md`, AUTONOMY =
 the hint or medium, a filled-in `AUTONOMY = …` line in every non-verifier spawn prompt, PHASING =
 on with the `phasing-estimate.md` and `phasing-split.md` paths, AUDIT = on with the top-level
-`.zi/{slug}/decisions.md` and the `audit.md` path, COMMIT = the `commit-message.md` path. The relay preamble lives in
+`.zi/{slug}/decisions.md` and the `audit.md` path, RESTATEMENT = notice, COMMIT = the
+`commit-message.md` path. The relay preamble lives in
 `stages/relay.md` (included into `task.md`, read by every non-verifier subagent); it carries no
 setting — it points at the spawn prompt's AUTONOMY line and says the QUESTION payload is ASK —
 and the level vocabulary, factors, formula and record form are stated once, in each stage
@@ -441,6 +455,6 @@ commands:
 - **Resolve in code what the code can answer; only ask the user for intent and decisions.**
   Ask decisions and clarifications one question per call, sequentially, via `AskUserQuestion`
   (the `/zi:task` exception: its prompt stage batches mutually independent Phase-1
-  clarifications, ≤4, into one relayed call, after the restatement is confirmed alone);
+  clarifications, ≤4, into one relayed call, after the restatement notice);
   present risks/consequences as batched `AskUserQuestion` calls (≤4 each), and never pad with
   questions the code already answers.

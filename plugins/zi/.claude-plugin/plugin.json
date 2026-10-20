@@ -2,7 +2,7 @@
   "name": "zi",
   "displayName": "ZI — Prompt to Plan to Execute",
   "description": "Turn a rough idea into a refined prompt and a verified implementation plan through context-cleared phases (prompt → plan), with an independent subagent verifying the plan; or run the whole prompt → plan → execute pipeline one-shot with /zi:task, which relays stage questions to you and commits on pass (or, with `manual execution`, stops at the verified plan), and a step-by-step mentor (`/zi:mentor`) that tutors you through implementing a plan yourself and commits at the end. Plus an overnight-loop prompt generator, a code locator, a todo registrar (`/zi:todo`), a todo compactor (`/zi:todo-compact`), and git stage/commit helpers.",
-  "version": "1.22.0",
+  "version": "1.23.0",
   "license": "MIT",
   "author": {
     "name": "Norbert Csatari"

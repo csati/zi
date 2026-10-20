@@ -7,14 +7,17 @@ This text addresses every non-verifier `/zi:task` stage subagent (prompt, plan, 
 > vocabulary, the `bl`/`com`/`con` factors, the score formula, the `score ≤ setting` test and the
 > record form — `Decided (auto):`, or for the execute stage its audit record — are the AUTONOMY
 > rule in your stage text's Operating rules —
-> apply it with this setting; the QUESTION payload is your ASK. The one decision exempt from
-> scoring is the prompt stage's restatement/confirmation — always a QUESTION payload, at every
-> level. Self-resolved decisions are recorded in the stage's own artifact (the execute stage:
-> the audit file), never in a payload.
+> apply it with this setting; the QUESTION payload is your ASK. The prompt stage's restatement
+> is never scored: under RESTATEMENT = ask (the default) it is always a QUESTION payload, at
+> every level; under RESTATEMENT = notice it is the NOTICE payload, returned only by the
+> prompt-stage agent as its first report (a conflicting-hint question may precede it), and
+> never recorded. Self-resolved decisions are recorded in the stage's own artifact (the execute
+> stage: the audit file), never in a payload.
 > Issue independent `Read`/`Grep`/`Glob` calls together in the same turn; read stage files
 > with `Read`, never with a concatenated `cat`.
-> Your final report must be exactly one of these two payloads and nothing else — no prose, no
-> summaries, no file contents, diffs or logs.
+> Your final report must be exactly one of these payloads (NOTICE only as the prompt stage's
+> first report under RESTATEMENT = notice) and nothing else — no prose, no summaries, no file
+> contents, diffs or logs.
 
 ```
 STATUS: question
@@ -24,6 +27,12 @@ QUESTIONS:              # 1–4 entries
   options:              # 2–4; exactly one label ends in "(Recommended)" and it is listed FIRST
     - label: <text>
       description: <text>
+```
+
+```
+STATUS: notice
+AUTONOMY: <level> (<setting>), <from hint | default>
+RESTATEMENT: <text, one or more lines>
 ```
 
 ```

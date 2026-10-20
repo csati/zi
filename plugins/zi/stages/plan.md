@@ -56,7 +56,7 @@ The host hands you:
   one answer is best; `score = 1 - (1 - bl) × (1 - com) × con`. Self-resolve only when
   `score ≤ setting`; otherwise raise it via ASK. Factors and score are written as decimals with
   at most two places. Never silently pick an interpretation: a decision resolved without either
-  ASK or a recorded score is a failure. This stage has no exempt decision — the always-asked
+  ASK or a recorded score is a failure. This stage has no exempt decision — the unscored
   restatement lives in the prompt stage. Every decision you resolve yourself MUST be recorded
   in DRAFT (hence in `plan.md` after PERSIST) as
   `Decided (auto): <choice> — <reason> (bl=<v> com=<v> con=<v> score=<v>)`.

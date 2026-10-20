@@ -20,7 +20,8 @@ own text.
     exactly the `bl`, `com`, `con` and `score` your stage text's Operating rules define
     (decimals, at most two places). A `Resolved by: user` record carries `Question:` /
     `Answer:` and **no** score line — the prompt stage's unscored restatement/confirmation
-    included.
+    included, which is recorded under RESTATEMENT = ask only; under RESTATEMENT = notice the
+    restatement gets no record.
 
 ## Create if missing
 
