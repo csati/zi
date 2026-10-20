@@ -5,8 +5,8 @@ it holds the phase-split step and the per-phase file rules.
 
 a. Partition the implementation into ordered phases, each a self-contained slice that leaves
    the repo working (later phases build on earlier commits). Estimate each phase with the
-   estimate rule in `phasing-estimate.md`; any phase above 100K is split further until every
-   phase is ≤100K. If a phase cannot be cut to ≤100K (a single file it must read already
+   estimate rule in `phasing-estimate.md`; any phase above 200K is split further until every
+   phase is ≤200K. If a phase cannot be cut to ≤200K (a single file it must read already
    exceeds the budget), raise that as a risk in Phase-2 form (accept the oversized phase /
    mitigate), scored like any Phase-2 risk, instead of silently exceeding it.
 b. Confirm the proposed list. It is scored like any decision: at a score ≤ setting
@@ -37,8 +37,8 @@ the form in `prompt.md`'s Output file contents section, with these additions:
 - every `Decided (user):` / `Decided (auto):` line that constrains the phase is restated
   verbatim in that phase file;
 - the sentence budget (20 + one per decision line present in *that* file) applies per file;
-- the fixed-form `Estimate:` line carries the phase's own figure and the 100K threshold —
-  `Estimate: <bytes> B ÷ 4 × 3 ≈ <N>K tokens (threshold 100K)`; like the heading it does not
+- the fixed-form `Estimate:` line carries the phase's own figure and the 200K threshold —
+  `Estimate: <bytes> B ÷ 4 × 3 ≈ <N>K tokens (threshold 200K)`; like the heading it does not
   count toward the budget;
 - the `## Grounding` section carries **only that phase's slice** of the manifest — the
   entries the phase reads, modifies or creates, with the role as seen from that phase (a file
