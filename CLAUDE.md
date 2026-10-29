@@ -60,7 +60,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.24.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.25.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## Token budget
@@ -277,12 +277,9 @@ binds it **on**. Under PHASING on the stage estimates the execute-context cost d
 gate if interrogation changed the file set) — and records it as a fixed-form `Estimate:` line.
 A total ≤200K tokens stays flat. A total >200K is partitioned into ordered, self-contained
 phases of ≤200K each (an uncuttable oversized phase is raised as a Phase-2 risk); the phase list
-(`phase-NN: <scope> (~<N>K)` per line plus the total) is **confirmed by the user via ASK, or
-self-confirmed when its score is within the bound autonomy setting** (recorded as
-`Decided (auto):`) — it is the cross-phase coverage check, since each phase's verifier sees
-only its own prompt — and
-only then are the `.zi/{slug}/phase-NN/prompt.md` files written (no top-level `prompt.md`; each
-names its phase N of M, states what earlier phases are assumed to have landed, and restates the
+is **not a decision** — never asked, scored or recorded; the stage checks cross-phase coverage
+itself, since each phase's verifier sees only its own prompt — and then writes the
+`.zi/{slug}/phase-NN/prompt.md` files (no top-level `prompt.md`; each names its phase N of M, states what earlier phases are assumed to have landed, and restates the
 decision lines that constrain it). The orchestrator reads the multi-path `ARTIFACTS` line, sorts
 the `phase-NN` directories, and runs the unchanged plan → verify → interrogate → execute
 chain **once per phase in order** with every artifact path rewritten to `phase-NN/…` and fresh

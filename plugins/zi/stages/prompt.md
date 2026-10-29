@@ -82,10 +82,11 @@ Under AUDIT on, every item of this run that went through ASK or a recorded score
 in the per-task audit file: under RESTATEMENT = ask the Phase-1 restatement/confirmation
 (unscored, `Resolved by: user`; under `notice` the restatement gets no record), every Phase-1
 clarification, every Phase-2 risk item, and — under
-PHASING on — the phase-list confirmation and any oversized-phase risk. **Timing**: buffer the
+PHASING on — any oversized-phase risk (the phase list itself is never a decision and gets no
+record). **Timing**: buffer the
 records in memory as each decision is resolved; write them **all in one pass** in Phase 3,
 after the task directory is created and immediately before the prompt file(s) — the first
-write of step 4's file pass, once every decision including the phase-list confirmation is
+write of step 4's file pass, once every decision is
 resolved — never before the task directory exists, never earlier (the "never write early"
 Operating rule covers the audit file too).
 The file is the sibling `decisions.md` of `prompt.md` — the top-level

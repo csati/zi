@@ -9,15 +9,11 @@ a. Partition the implementation into ordered phases, each a self-contained slice
    phase is ≤200K. If a phase cannot be cut to ≤200K (a single file it must read already
    exceeds the budget), raise that as a risk in Phase-2 form (accept the oversized phase /
    mitigate), scored like any Phase-2 risk, instead of silently exceeding it.
-b. Confirm the proposed list. It is scored like any decision: at a score ≤ setting
-   self-confirm it and record `Decided (auto):`; otherwise put it to the user via **ASK** —
-   the question text carries one line per phase in execution order —
-   `phase-NN: <one-line scope> (~<N>K)` — plus the total, and ends with a question; the
-   options are "Confirm the phase list (Recommended)" and "Revise" (free text describes
-   the change) — and loop until the user confirms. Nothing is written before the list is
-   confirmed, by the user or by a recorded score — the list is the
-   cross-phase coverage check: each phase's verifier sees only its own phase prompt.
-c. Write one file per confirmed phase, named exactly
+b. The phase list is not a decision: it is neither put to the user nor scored nor recorded.
+   Before writing, check it yourself for cross-phase coverage — each phase's verifier sees
+   only its own phase prompt, so every requirement of the spec must land in exactly one
+   phase and every phase may assume only what earlier phases land.
+c. Write one file per phase, named exactly
    `.zi/{YYYYMMDD-HHmmss}-{description}/phase-NN/prompt.md`, `NN` two-digit zero-padded
    from `01` (`phase-10`, `phase-11`, … beyond nine), in one uninterrupted pass in
    execution order — the phase set is durable only once the stage reports DONE. A phased

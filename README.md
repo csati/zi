@@ -123,9 +123,8 @@ never touches it, and the interactive commands (`/zi:prompt`, `/zi:plan`) write 
 **Big jobs are split into phases.** While it grounds the idea, the prompt stage estimates how
 much context the implementation will need (the size of every file it must read or change,
 converted to tokens, times three for tool output, tests and iteration). If the total exceeds
-200K tokens the work is cut into ordered, self-contained phases of at most 200K each, and you
-are asked to **confirm the phase list** — one line per phase with its scope and estimate —
-unless the autonomy level lets the stage decide it, before anything is written. Each phase then gets its own `.zi/{slug}/phase-NN/prompt.md` (instead of a
+200K tokens the work is cut into ordered, self-contained phases of at most 200K each — without
+asking you to confirm the phase list. Each phase gets its own `.zi/{slug}/phase-NN/prompt.md` (instead of a
 top-level `prompt.md`) and is planned, verified, executed and **committed on its own, one phase
 after another**, with a `phase-NN/commit` marker recording each hash. If you stop a phase's fix
 loop the run **halts**: later phases never start, earlier commits stay on the branch,
