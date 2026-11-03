@@ -15,12 +15,14 @@ finds the first automatically (`prompt.md` → `plan.md`).
 
 ## The commands
 
-The plugin ships ten slash commands — two planning phases, a one-shot pipeline, a step-by-step plan mentor, a standalone overnight-loop generator, two git helpers, a code locator, a todo registrar, and a todo compactor:
+The plugin ships ten slash commands — two planning phases, a one-shot pipeline, a step-by-step
+plan mentor, a standalone overnight-loop generator, two git helpers, a code locator, a todo
+registrar, and a todo compactor:
 
 | Command | Reads | Produces | Role |
 |---------|-------|----------|------|
 | `/zi:prompt <desc>` | a rough idea | `.zi/{slug}/prompt.md` | interrogate intent, surface flaws, save a refined prompt |
-| `/zi:plan <prompt>` | `.zi/{slug}/prompt.md` or inline text | `.zi/{slug}/plan.md` | draft a plan, independently verify it, persist on approval |
+| `/zi:plan <prompt>` | `.zi/{slug}/prompt.md` or inline text | `.zi/{slug}/plan.md` | draft a plan, independently verify it, then execute it, persist it, or re-review — your choice |
 | `/zi:task <idea>` | a rough idea, or a `.zi/{slug}` dir to resume | `prompt.md`, `findings.md`, `plan.md`, `decisions.md` + a commit and a `commit` marker — or, for oversized work, `phase-NN/` directories each with those three files, a commit and a `commit` marker (plus one top-level `decisions.md`) | run prompt → plan → execute in fresh subagents, relay their questions to you, commit on pass |
 | `/zi:mentor <plan>` | a `plan.md`, a `.zi/{slug}` dir or a bare slug | a commit + the `commit` marker beside the plan | tutor you through implementing the plan yourself, one step at a time, then verify and commit |
 | `/zi:overnight <goal>` | a loop GOAL | `.zi/{slug}/overnight.md` | interrogate the goal, generate an unattended never-halt loop-orchestration prompt |
@@ -32,11 +34,11 @@ The plugin ships ten slash commands — two planning phases, a one-shot pipeline
 
 **Clear context between phases.** Each phase's quality comes from a clean context that sees
 only the prior artifact. Both planning phases are interactive — you run them, answer their
-questions, and approve their output. After `plan` writes `plan.md`, **you implement the code
-yourself** — the `prompt → plan` flow stops at the verified plan. **`/zi:task` is the deliberate
-exception**: it is the one command with a self-committing back half — it runs the same stages
-one-shot and finishes by implementing the plan and committing on the current branch (never
-pushing).
+questions, and approve their output. The `prompt → plan` flow stops at the verified plan:
+**you decide whether and when the code gets written** — by picking *Execute now* at the end of
+`/zi:plan`, with `/zi:mentor`, or by hand — and it never commits. **`/zi:task` is the deliberate
+exception**: it runs the same stages one-shot and finishes by implementing the plan and
+committing on the current branch (never pushing).
 
 ### `/zi:prompt` — refine the idea
 
@@ -57,14 +59,18 @@ rediscovering the repo.
 Takes a prompt — a `.zi/{slug}/prompt.md` file, a task-directory reference, or inline text —
 and drafts a concrete implementation plan in plan mode, grounded in the real files, modules,
 and build/test/lint commands of your repo, starting from the prompt's grounding manifest and
-ending with its own `## Files` manifest that the verifier and the executor read first. It then launches a **fresh, independent subagent**
-that never sees the planning conversation to verify the plan against both the prompt and the
-codebase — checking prompt fidelity, internal consistency, groundedness, feasibility, ordering,
-and verifiability — and returns a structured findings list. You work those findings **one at a
-time**, deciding each resolution unless the autonomy level lets the stage decide it, and the
-plan is updated as you go. Only after you approve does
-it persist the verified plan to `.zi/{slug}/plan.md` — paired as a sibling of its source
-prompt — and stop. Implementing the plan is a separate step you initiate.
+ending with its own `## Files` manifest that the verifier and the executor read first. It then
+launches a **fresh, independent subagent** that never sees the planning conversation to verify
+the plan against both the prompt and the codebase — checking prompt fidelity, internal
+consistency, groundedness, feasibility, ordering, and verifiability — and returns a structured
+findings list. You work those findings **one at a time**, deciding each resolution unless the
+prompt's `Autonomy:` level lets the stage decide it, and the plan is updated as you go.
+
+When the findings are resolved it asks what next: **Execute now** (implement the plan in the
+same context), **Exit plan mode** (hand off and stop), or **Run a second reviewer** (another
+fresh verifier, then the same question again). Both finishing paths persist the verified plan to
+`.zi/{slug}/plan.md` — a sibling of its source prompt — and even a plan-mode setting that clears
+context on approval still gets it written. Only *Execute now* writes code, and it never commits.
 
 ### `/zi:task` — the whole pipeline in one shot
 
@@ -76,12 +82,14 @@ you as a normal `AskUserQuestion` and your answer is sent back to the same agent
 in the pipeline needs you. The prompt stage first shows its restatement of your idea, with the
 autonomy level in force, as a notice — nothing to confirm; to cancel the run, press Esc and
 send `stop`. Its mutually independent clarification questions then arrive together (up to four
-in one question), while `/zi:prompt` still asks them one at a time. The plan is drafted to `plan.draft.md`, independently verified by a
-read-only subagent that writes `findings.md`, and becomes `plan.md` once the last finding is
-resolved. There is no gate after the prompt stage and exactly one verification pass: as soon
-as `plan.md` exists the execute agent implements it, runs the plan's verification commands, and
-on pass **commits the implementation paths on the current branch** (never `.zi/` artifacts,
-never a push) with a terse single-line message. On failure the same agent keeps fixing and
+in one prompt), while `/zi:prompt` still asks them one at a time. The plan is drafted to
+`plan.draft.md`, independently verified by a read-only subagent that writes `findings.md`, and
+becomes `plan.md` once the last finding is resolved (at once, when there are none). There is no
+gate after the prompt stage and exactly one verification pass: as soon as `plan.md` exists the
+execute agent implements it, runs the plan's verification commands, and on pass **commits the
+implementation paths on the current branch** (never `.zi/` artifacts, never a push) with a
+one-sentence subject and a short body only when the subject alone would be unclear — the same
+rules `/zi:commit` follows. On failure the same agent keeps fixing and
 re-running verification in rounds until it passes; when a round stalls on the same error, or
 after 10 rounds, it asks you whether to continue fixing (another 10 rounds, with any guidance
 you give) or stop. Only when you answer Stop is the work staged, not committed, and you're
@@ -107,8 +115,9 @@ autonomy`, `autonomy: max`, `full autonomy`, `autonomy=low` — to set one of fi
 `/zi:task` runs at **medium**. For every decision a stage scores how much of the repo it
 touches, how hard it would be to reverse and how sure it is that one answer is best, and
 decides it itself only when that score is within the level — otherwise the question is relayed
-to you. Every self-decision is recorded with its factors and score as a `Decided (auto):` line
-in `prompt.md`, `plan.md` or the commit body, so nothing is decided invisibly. Under
+to you. Every self-decision is recorded with its factors and score — as a `Decided (auto):` line
+in `prompt.md` or `plan.md`, and for the execute stage in `decisions.md` (below) — so nothing is
+decided invisibly. Under
 `/zi:task` the prompt stage's restatement of your idea is shown, not asked; `/zi:prompt` still
 asks you to confirm it at every level.
 
@@ -124,19 +133,19 @@ never touches it, and the interactive commands (`/zi:prompt`, `/zi:plan`) write 
 much context the implementation will need (the size of every file it must read or change,
 converted to tokens, times three for tool output, tests and iteration). If the total exceeds
 200K tokens the work is cut into ordered, self-contained phases of at most 200K each — without
-asking you to confirm the phase list. Each phase gets its own `.zi/{slug}/phase-NN/prompt.md` (instead of a
-top-level `prompt.md`) and is planned, verified, executed and **committed on its own, one phase
-after another**, with a `phase-NN/commit` marker recording each hash. If you stop a phase's fix
-loop the run **halts**: later phases never start, earlier commits stay on the branch,
-and the failing phase's work is left staged. Smaller jobs are untouched by this — a single
+asking you to confirm the phase list. Each phase gets its own `.zi/{slug}/phase-NN/prompt.md`
+(instead of a top-level `prompt.md`) and is planned, verified, executed and **committed on its
+own, one phase after another**, with a `phase-NN/commit` marker recording each hash. If you stop
+a phase's fix loop the run **halts**: later phases never start, earlier commits stay on the
+branch, and the failing phase's work is left staged. Smaller jobs are untouched by this — a single
 `prompt.md`, one chain, one commit — and `/zi:prompt` never estimates or phases anything.
 
 Pass a `.zi/{slug}` directory (or bare slug) instead of an idea to **resume** at the first
 missing artifact: `prompt.md` only → planning; a lone `plan.draft.md` → re-verify; `plan.md` →
-execution; a `commit` marker → the task is complete (a flat pass writes `.zi/{slug}/commit`);
-an empty directory → it asks for the idea. A phased task resumes at the lowest
-`phase-NN/` without a `commit` marker and applies the same rules inside it, then carries on with
-the later phases. **Start `/zi:task` from a fresh session** — the orchestrator's context should
+execution (or the manual stop); a `commit` marker → the task is complete (a flat pass writes
+`.zi/{slug}/commit`); an empty directory → it asks for the idea. A phased task resumes at the
+lowest `phase-NN/` without a `commit` marker and applies the same rules inside it, then carries
+on with the later phases; a phase directory without a `prompt.md` is reported as malformed. **Start `/zi:task` from a fresh session** — the orchestrator's context should
 hold nothing but the run.
 
 `/zi:prompt`, `/zi:plan` and `/zi:task` all read the same stage text from `plugins/zi/stages/`,
@@ -256,7 +265,12 @@ zi/                                   ← repo root = the "ncs-plugins" marketpl
 ├── plugins/zi/                       ← the plugin itself
 │   ├── .claude-plugin/plugin.json
 │   ├── commands/   prompt, plan, task, mentor, overnight, stage, commit, locate, todo, todo-compact
-│   └── stages/     prompt, plan, verify, execute   ← shared stage text read by prompt, plan and task
+│   └── stages/                       ← shared stage text, not slash commands
+│       ├── prompt, plan, verify, execute         ← read by prompt, plan and task
+│       ├── relay, audit, commit-message          ← task subagents (commit-message also by commit, mentor)
+│       ├── phasing-estimate, phasing-split       ← task's prompt stage, for oversized work
+│       └── task-phased, task-resume              ← task's orchestrator, phased / resumed runs only
+├── utils/statusline.sh               ← optional Claude Code status line script, not part of the plugin
 ├── README.md
 ├── CLAUDE.md
 └── LICENSE
@@ -266,11 +280,10 @@ After install, commands are namespaced **`/zi:<command>`** (e.g. `/zi:prompt`).
 
 ## Caveats
 
-- **Plan, don't implement — except `/zi:task` and `/zi:mentor`.** `/zi:plan` stops at a
-  verified, approved `plan.md`; writing and committing the code is a separate step you drive
-  yourself. `/zi:task` is the deliberate exception: it implements the plan and commits on the
-  current branch (never pushes), so invoke it only when that is what you want. `/zi:mentor`
-  commits too, at the end of a loop you drive.
+- **Plan, don't commit — except `/zi:task` and `/zi:mentor`.** `/zi:plan` writes code only
+  when you pick *Execute now*, and never commits. `/zi:task` is the deliberate exception: it
+  implements the plan and commits on the current branch (never pushes), so invoke it only when
+  that is what you want. `/zi:mentor` commits too, at the end of a loop you drive.
 - **Independence is the point.** `/zi:plan`'s verification runs in a fresh subagent with no
   view of the planning conversation — it reports findings, it never silently rewrites the plan.
 - **`stage`, `commit`, `locate`, `todo`, and `todo-compact`** are general-purpose helpers bundled
