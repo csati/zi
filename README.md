@@ -106,8 +106,8 @@ resume command picks up the next one.
 
 **A run is never silent between questions.** The orchestrator prints a status checklist at
 every stage boundary — which stage is running, what each finished stage produced (an artifact
-path or a commit hash), and for phased runs one row per phase with only the running phase
-expanded — so you always know where the pipeline is.
+path or a commit hash), and for phased runs only the current phase, labelled with its position
+(`phase 2/5`) — so you always know where the pipeline is.
 
 **How much it decides on its own is a dial.** Add a hint to the argument — `with high
 autonomy`, `autonomy: max`, `full autonomy`, `autonomy=low` — to set one of five levels:

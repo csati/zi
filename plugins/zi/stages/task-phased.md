@@ -18,34 +18,35 @@ unrelated flat task): report the task as malformed, naming that directory, and s
 ### Phased shape
 
 Once the prompt stage's DONE names several `phase-NN/prompt.md` paths (or a resumed `.zi/{slug}`
-is found phased), the list switches to the phased shape:
+is found phased), the list switches to the phased shape, which shows **only the current phase**
+— never a row for any other phase, done or pending, so a print stays the same length however
+many phases the run has:
 
-- the top-level `prompt` row stays, `[x]`, carrying the paths the payload named,
-  comma-separated (or, on resume, the `phase-NN/prompt.md` paths `Glob` found);
-- then one row per `phase-NN` in sorted order: `- [x] phase-NN → <hash>` for a phase whose
-  `commit` marker exists or was just written, `- [>] phase-NN` for the running phase,
-  `- [ ] phase-NN` for later phases, `- [!] phase-NN → failed` for a phase that halted the run;
-- only the running (or halted) phase is expanded: its stage rows — `plan (draft)`, `verify`,
-  `plan (interrogate)`, `execute`, `commit` — are indented one level under its
-  `[>] phase-NN` row and follow task.md's flat rules; every other phase is a single row, so
-  scrollback stays short for many-phase runs;
+- the top-level `prompt` row stays, `[x]`, carrying only the current phase's
+  `phase-NN/prompt.md` path;
+- then exactly one phase row labelled `phase <N>/<M>`, where `M` is the number of `phase-NN`
+  directories and `N` the current phase's 1-based position in their sorted order:
+  `- [ ] phase 1/<M>` on the print that follows the prompt stage's DONE (nothing runs yet),
+  `- [>] phase <N>/<M>` while it runs, `- [x] phase <N>/<M> → <hash>` once its `commit` marker
+  was just written, `- [!] phase <N>/<M> → failed` when it halted the run;
+- a running or halted phase is expanded: its stage rows — `plan (create)`, `verify`,
+  `plan (update)`, `execute`, `commit` — are indented one level under its phase row and
+  follow task.md's flat rules; a `[ ]` or `[x]` phase is that single row;
 - writing `P/commit` is **not** a transition of its own: on a phase's `RESULT: pass <hash>`
   write `P/commit` first, and the pass-DONE print then already shows that phase collapsed to
-  `- [x] phase-NN → <hash>`; the next phase's expansion first appears on its plan-spawn print.
+  `- [x] phase <N>/<M> → <hash>`; the next phase replaces it on its plan-spawn print.
   The three transition kinds in task.md therefore remain the only ones.
 
 A phased run, printed right after the second phase's verifier spawn:
 
 ```
-- [x] prompt → .zi/20260101-000000-example/phase-01/prompt.md, .zi/20260101-000000-example/phase-02/prompt.md, .zi/20260101-000000-example/phase-03/prompt.md
-- [x] phase-01 → 1a2b3c4
-- [>] phase-02
-  - [x] plan (draft) → .zi/20260101-000000-example/phase-02/plan.draft.md
+- [x] prompt → .zi/20260101-000000-example/phase-02/prompt.md
+- [>] phase 2/3
+  - [x] plan (create) → .zi/20260101-000000-example/phase-02/plan.draft.md
   - [>] verify — verifying
-  - [ ] plan (interrogate)
+  - [ ] plan (update)
   - [ ] execute
   - [ ] commit
-- [ ] phase-03
 ```
 
 ### Phased flow
@@ -74,7 +75,7 @@ checklist tracks no such artifact.
    verifier, execute); the fenced `@P/plan.md` block is printed per phase with the actual
    path; each phase's execute agent commits on its own under the unchanged execute-stage
    rules — one commit per phase. Whenever those stages say to re-print the checklist, the
-   checklist is in its phased shape and the running phase is the expanded one. Under
+   checklist is in its phased shape and the running phase is the one it shows. Under
    `MANUAL = on` the execute stage of the current phase is task.md's manual stop with
    `P/plan.md` as the plan path; the run ends there and later phases are not started (the
    printed resume command continues them — a phase committed by `/zi:mentor` carries `P/commit`
@@ -84,13 +85,13 @@ checklist tracks no such artifact.
    stage are the only files the orchestrator ever writes, apart from the zero-findings rename
    `P/plan.draft.md` → `P/plan.md`, and it never reads either back —
    resume checks their presence with `Glob` only) **before** the pass-DONE
-   re-print — that print already shows the phase collapsed to `- [x] phase-NN → <hash>`; the
-   marker write gets no print of its own. Then start the next phase.
+   re-print — that print already shows the phase collapsed to `- [x] phase <N>/<M> → <hash>`;
+   the marker write gets no print of its own. Then start the next phase.
 3. **Halt**: on a phase's `RESULT: fail` (which arrives only after the user stopped that
    phase's fix loop, or its verification could not run) stop — never start a later phase.
    That fail DONE's re-print shows the phase row `[!]` with its inner rows as the fail left
    them — no separate halt print. Then report the failing phase directory `P`, the `COMMAND`,
    that the `CHANGED` paths are **staged, not committed**, that earlier phases' commits stay
    on the branch, and the resume command `/zi:task .zi/{slug}`.
-4. After the last phase passes — its pass-DONE re-print shows every phase `[x]` — report the
-   list of phase plan paths (`P/plan.md`) and their commit hashes, in order. Done.
+4. After the last phase passes — its pass-DONE re-print shows `- [x] phase <M>/<M> → <hash>` —
+   report the list of every phase's plan path (`P/plan.md`) and commit hash, in order. Done.

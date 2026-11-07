@@ -60,7 +60,7 @@ is refreshed only by a reinstall (`/plugin uninstall zi@ncs-plugins` → `/plugi
 update` → `/plugin install zi@ncs-plugins`) or `/plugin update`. When the marketplace was added
 **over git**, colleagues run from that cache copy and get changes only via `/plugin marketplace
 update` + `/plugin update zi@ncs-plugins`, so when shipping a change they will pull, bump
-`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.25.0`). If you change
+`version` in `plugins/zi/.claude-plugin/plugin.json` (currently `1.26.0`). If you change
 `marketplace.json` or `plugin.json`, run `/plugin marketplace update`.
 
 ## Token budget
@@ -214,8 +214,9 @@ stage: `[ ]` pending, `[>] — <activity>` running, `[x] → <path or hash>` don
 in full after every spawn, after the `SendMessage` that resumes the plan agent for
 interrogation, and after every conforming DONE — never during a relay (the `AskUserQuestion`
 is the feedback there). Rows carry only stage names, markers, artifact paths and commit hashes
-— never free text or artifact content. Phased runs show one row per phase with only the
-running phase expanded; a resume pre-marks rows from the same `Glob` the resume rules run. The
+— never free text or artifact content. Phased runs show only the current phase, as one
+`phase <N>/<M>` row (position / total) with its stage rows expanded, and no row for any other
+phase; a resume pre-marks rows from the same `Glob` the resume rules run. The
 checklist is defined once in `task.md`'s "Status checklist" section (its phased and resume
 shapes in `stages/task-phased.md` / `stages/task-resume.md`) and every transition point
 references it; subagents receive nothing about it.

@@ -196,20 +196,20 @@ shows which stage is running. You print it yourself; the spawn prompts carry not
 
 ### Rows and markers
 
-One row per stage, in pipeline order: `prompt`, `plan (draft)`, `verify`, `plan (interrogate)`,
+One row per stage, in pipeline order: `prompt`, `plan (create)`, `verify`, `plan (update)`,
 `execute`, `commit`. There is no `fix` row: the execute agent's fix-and-retry loop and its
 stall question happen inside its own stage; the stall question is an ordinary relay question
 (no print) and a Continue answer is not a transition. Exactly four markers:
 
 - `- [ ] <stage>` — pending.
 - `- [>] <stage> — <activity>` — running. `<activity>` is the fixed one-word label of that
-  stage: `prompt` → `interrogating`, `plan (draft)` → `drafting`, `verify` → `verifying`,
-  `plan (interrogate)` → `interrogating`, `execute` → `implementing`. The
+  stage: `prompt` → `interrogating`, `plan (create)` → `drafting`, `verify` → `verifying`,
+  `plan (update)` → `updating`, `execute` → `implementing`. The
   `commit` row is never `[>]` — the execute agent commits inside its own stage, so `commit`
   moves straight from `[ ]` to `[x]` or `[!]`.
-- `- [x] <stage> → <path or hash>` — done. For `prompt`, `plan (draft)`, `verify` and
-  `plan (interrogate)` the payload after `→` is the path(s) the DONE payload's `ARTIFACTS` line
-  named, verbatim — except that on zero findings `plan (interrogate)` carries the `plan.md`
+- `- [x] <stage> → <path or hash>` — done. For `prompt`, `plan (create)`, `verify` and
+  `plan (update)` the payload after `→` is the path(s) the DONE payload's `ARTIFACTS` line
+  named, verbatim — except that on zero findings `plan (update)` carries the `plan.md`
   path of the orchestrator's own rename (no plan DONE names it). For `execute` and `commit` it
   is the hash from `RESULT: pass <hash>`.
 - `- [!] <stage> → failed` — a stage whose DONE carried `RESULT: fail` (only `execute` can).
@@ -228,12 +228,12 @@ else:
 - immediately after each `Agent` spawn (prompt, plan, verifier, execute) — the spawned
   stage's row becomes `[>]`;
 - immediately after the `SendMessage` that resumes the plan agent with the findings path
-  (plan-stage step 3) — `plan (interrogate)` becomes `[>]`; the verifier's DONE print precedes
+  (plan-stage step 3) — `plan (update)` becomes `[>]`; the verifier's DONE print precedes
   it separately. This is the one transition that is a resume rather than a spawn, and it does
   not occur on zero findings;
 - immediately after each conforming DONE report — the reporting stage's row becomes `[x]` (or
   `[!]`), and on `RESULT: pass <hash>` the `commit` row becomes `[x]` in the same print; on the
-  verifier's `RESULT: 0 findings` the same print also marks `plan (interrogate)` `[x]`.
+  verifier's `RESULT: 0 findings` the same print also marks `plan (update)` `[x]`.
 
 No print while a question is relayed or answers are sent back, nor while a notice is
 delivered (its own print — the notice lines and the cancel line — is the feedback), nor on
@@ -248,9 +248,9 @@ A flat run mid-way, printed right after the execute spawn:
 
 ```
 - [x] prompt → .zi/20260101-000000-example/prompt.md
-- [x] plan (draft) → .zi/20260101-000000-example/plan.draft.md
+- [x] plan (create) → .zi/20260101-000000-example/plan.draft.md
 - [x] verify → .zi/20260101-000000-example/findings.md
-- [x] plan (interrogate) → .zi/20260101-000000-example/plan.md
+- [x] plan (update) → .zi/20260101-000000-example/plan.md
 - [>] execute — implementing
 - [ ] commit
 ```
@@ -285,7 +285,7 @@ one of two shapes:
 - **phased** — several `.zi/{slug}/phase-NN/prompt.md` paths → `Read` `task-phased.md`, then
   derive `{slug}` from their common prefix and the **phase order** by sorting the `phase-NN`
   directory names lexically (two-digit padding makes lexical order numeric), re-print in the
-  phased shape (`prompt` `[x]` with all the paths, every phase `[ ]`), then **auto-continue**
+  phased shape (`prompt` `[x]` with the first phase's path, `phase 1/<M>` `[ ]`), then **auto-continue**
   into its "Phased flow" section at the first phase — no gate, no confirmation.
 
 ### Plan stage
@@ -301,8 +301,8 @@ one of two shapes:
    then return `STATUS: done`, `STAGE: plan`, `ARTIFACTS: .zi/{slug}/plan.md`"**; **AUTONOMY =
    the filled-in AUTONOMY line**; **AUDIT = the literal path `.zi/{slug}/decisions.md`, plus
    the absolute `audit.md` path**. No TIMESTAMP: the plan stage always writes into the existing
-   task directory. Then re-print (`plan (draft)` `[>]`). Run the relay loop.
-2. On DONE naming **`plan.draft.md`** → re-print (`plan (draft)` `[x]` with that path), then
+   task directory. Then re-print (`plan (create)` `[>]`). Run the relay loop.
+2. On DONE naming **`plan.draft.md`** → re-print (`plan (create)` `[x]` with that path), then
    spawn the **verifier**: a fresh `general-purpose` `Agent` instructed to be **read-only
    except for writing `.zi/{slug}/findings.md`**. Its prompt contains: "Read and follow
    `<absolute verify-stage path>` — it is your only stage text; do not read the plan stage's
@@ -322,15 +322,15 @@ one of two shapes:
 3. On the verifier's DONE:
    - **Exactly `RESULT: 0 findings`** → the zero-findings rename: run
      `mv .zi/{slug}/plan.draft.md .zi/{slug}/plan.md` yourself, then re-print once (`verify`
-     `[x]` with the findings path and `plan (interrogate)` `[x]` with the `plan.md` path) — no
+     `[x]` with the findings path and `plan (update)` `[x]` with the `plan.md` path) — no
      `[>]` print, and the plan agent is **not** resumed. Go to step 4, skipping its re-print.
    - **Any other, missing or malformed `RESULT`** (still a conforming DONE) → re-print
      (`verify` `[x]` with the findings path), then `SendMessage` to the **plan agent** (resume
      it by its id): "Findings are at `.zi/{slug}/findings.md`. Interrogate them one at a time
      via ASK in descending severity, apply each resolution to DRAFT before raising the next,
-     then PERSIST." Then re-print (`plan (interrogate)` `[>]`). Run the relay loop.
+     then PERSIST." Then re-print (`plan (update)` `[>]`). Run the relay loop.
 4. On DONE naming **`plan.md`** (or after the zero-findings rename) → re-print
-   (`plan (interrogate)` `[x]` with that path; skipped after the rename, whose print already
+   (`plan (update)` `[x]` with that path; skipped after the rename, whose print already
    shows it), then print, on its own line, a fenced code block whose sole content is a bare
    file-mention of the plan with the **actual** path (never the literal `{slug}`), exactly as `/zi:plan` does:
 
@@ -346,7 +346,7 @@ one of two shapes:
 spawns a **fresh** plan agent at entry point `interrogate` instead of resuming one — its
 prompt: the relay lines; stage path; prompt path; DRAFT; findings path; ASK/PERSIST as above;
 AUTONOMY = the filled-in AUTONOMY line; AUDIT = the literal path `.zi/{slug}/decisions.md`,
-plus the absolute `audit.md` path — then re-prints (`plan (interrogate)` `[>]`). On
+plus the absolute `audit.md` path — then re-prints (`plan (update)` `[>]`). On
 `RESULT: 0 findings` step 3's zero-findings rename applies instead and no fresh plan agent is
 spawned.
 
